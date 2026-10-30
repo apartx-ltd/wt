@@ -40,13 +40,13 @@ afterAll(() => {
 });
 
 test("GET /api/health reports the protocol version", async () => {
-  const res = await fetch(`http://localhost:${server.port}/api/health`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/health`);
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ version: WT_PROTOCOL_VERSION });
 });
 
 test("GET /api/instances returns merged list", async () => {
-  const res = await fetch(`http://localhost:${server.port}/api/instances`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/instances`);
   expect(res.status).toBe(200);
   const body = await res.json();
   // cabinet/x is running (up); spaces/y is a worktree with no instance (down)
@@ -65,7 +65,7 @@ test("GET /api/instances includes a synthetic base row from readBases", async ()
     readRunning: async () => [],
     readBases: async () => [{ project: "apartx-cabinet", branch: "develop", port: 3500 }],
   });
-  const res = await fetch(`http://localhost:${s.port}/api/instances`);
+  const res = await fetch(`http://127.0.0.1:${s.port}/api/instances`);
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(body).toEqual(
@@ -77,7 +77,7 @@ test("GET /api/instances includes a synthetic base row from readBases", async ()
 });
 
 test("GET /api/events streams an initial instances event", async () => {
-  const res = await fetch(`http://localhost:${server.port}/api/events`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/events`);
   const reader = res.body!.getReader();
   const { value } = await reader.read();
   const chunk = new TextDecoder().decode(value);
@@ -86,7 +86,7 @@ test("GET /api/events streams an initial instances event", async () => {
 });
 
 test("GET /api/events pushes an initial event even when the system is empty", async () => {
-  const res = await fetch(`http://localhost:${emptyServer.port}/api/events`);
+  const res = await fetch(`http://127.0.0.1:${emptyServer.port}/api/events`);
   const reader = res.body!.getReader();
   const { value } = await reader.read();
   const chunk = new TextDecoder().decode(value);
@@ -97,7 +97,7 @@ test("GET /api/events pushes an initial event even when the system is empty", as
 
 test("POST .../stop awaits wt and returns its exit code", async () => {
   const res = await fetch(
-    `http://localhost:${server.port}/api/instances/apartx-cabinet/x/stop`,
+    `http://127.0.0.1:${server.port}/api/instances/apartx-cabinet/x/stop`,
     { method: "POST" },
   );
   expect(res.status).toBe(200);
@@ -106,7 +106,7 @@ test("POST .../stop awaits wt and returns its exit code", async () => {
 
 test("POST .../start is fire-and-forget (202 ok)", async () => {
   const res = await fetch(
-    `http://localhost:${server.port}/api/instances/apartx-cabinet/x/start`,
+    `http://127.0.0.1:${server.port}/api/instances/apartx-cabinet/x/start`,
     { method: "POST" },
   );
   expect(res.status).toBe(202);
@@ -114,7 +114,7 @@ test("POST .../start is fire-and-forget (202 ok)", async () => {
 });
 
 test("GET .../logs streams log lines as SSE", async () => {
-  const res = await fetch(`http://localhost:${server.port}/api/instances/apartx-cabinet/x/logs`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/instances/apartx-cabinet/x/logs`);
   expect(res.headers.get("Content-Type")).toContain("text/event-stream");
   let text = "";
   const reader = res.body!.getReader();
@@ -132,7 +132,7 @@ test("GET .../logs streams log lines as SSE", async () => {
 
 test("the spawned wt CLI gets the server's workspace root as WT_ORCH", async () => {
   // Stub echoes $WT_ORCH for `logs wt-orch …`; the server's orch is ORCH, not the test's cwd.
-  const res = await fetch(`http://localhost:${server.port}/api/instances/wt-orch/x/logs`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/instances/wt-orch/x/logs`);
   const expected = `data: ${JSON.stringify(`WT_ORCH=${ORCH}`)}`;
   let text = "";
   const reader = res.body!.getReader();
@@ -147,18 +147,18 @@ test("the spawned wt CLI gets the server's workspace root as WT_ORCH", async () 
 });
 
 test("unknown action method → 405", async () => {
-  const res = await fetch(`http://localhost:${server.port}/api/instances/p/s/stop`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/instances/p/s/stop`);
   expect(res.status).toBe(405);
 });
 
 test("GET /api/projects lists project names", async () => {
-  const res = await fetch(`http://localhost:${server.port}/api/projects`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/projects`);
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual(["apartx-server", "apartx-cabinet"]);
 });
 
 test("POST /api/worktrees is fire-and-forget (202)", async () => {
-  const res = await fetch(`http://localhost:${server.port}/api/worktrees`, {
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/worktrees`, {
     method: "POST",
     body: JSON.stringify({ project: "apartx-server", slug: "feat-x", isolatedDb: true }),
   });
@@ -167,7 +167,7 @@ test("POST /api/worktrees is fire-and-forget (202)", async () => {
 });
 
 test("POST /api/worktrees requires project + slug (400)", async () => {
-  const res = await fetch(`http://localhost:${server.port}/api/worktrees`, {
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/worktrees`, {
     method: "POST",
     body: JSON.stringify({ project: "apartx-server" }),
   });
@@ -176,7 +176,7 @@ test("POST /api/worktrees requires project + slug (400)", async () => {
 
 test("DELETE /api/worktrees/:p/:slug returns exit code", async () => {
   const res = await fetch(
-    `http://localhost:${server.port}/api/worktrees/apartx-cabinet/x`,
+    `http://127.0.0.1:${server.port}/api/worktrees/apartx-cabinet/x`,
     { method: "DELETE" },
   );
   expect(res.status).toBe(200);
@@ -185,7 +185,7 @@ test("DELETE /api/worktrees/:p/:slug returns exit code", async () => {
 
 test("GET /api/meta returns the injected title and the workspace root", async () => {
   const s = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...READERS, readTitle: async () => "My Workspace" });
-  const res = await fetch(`http://localhost:${s.port}/api/meta`);
+  const res = await fetch(`http://127.0.0.1:${s.port}/api/meta`);
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ title: "My Workspace", orch: ORCH });
   s.stop(true);
@@ -193,18 +193,18 @@ test("GET /api/meta returns the injected title and the workspace root", async ()
 
 test("GET /api/meta returns null title when unset", async () => {
   const s = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...READERS, readTitle: async () => null });
-  const res = await fetch(`http://localhost:${s.port}/api/meta`);
+  const res = await fetch(`http://127.0.0.1:${s.port}/api/meta`);
   expect(await res.json()).toEqual({ title: null, orch: ORCH });
   s.stop(true);
 });
 
 test("POST .../link and .../unlink return exit codes", async () => {
-  const link = await fetch(`http://localhost:${server.port}/api/instances/apartx-cabinet/x/link`, {
+  const link = await fetch(`http://127.0.0.1:${server.port}/api/instances/apartx-cabinet/x/link`, {
     method: "POST",
     body: JSON.stringify({ linkSlug: "x" }),
   });
   expect(await link.json()).toEqual({ code: 0 });
-  const unlink = await fetch(`http://localhost:${server.port}/api/instances/apartx-cabinet/x/unlink`, {
+  const unlink = await fetch(`http://127.0.0.1:${server.port}/api/instances/apartx-cabinet/x/unlink`, {
     method: "POST",
   });
   expect(await unlink.json()).toEqual({ code: 0 });
@@ -220,7 +220,7 @@ describe("static dashboard (staticDir)", () => {
   const SECRET = `${STATIC}-secret.txt`;
   writeFileSync(SECRET, "secret");
   const s = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...READERS, staticDir: STATIC });
-  const base = `http://localhost:${s.port}`;
+  const base = `http://127.0.0.1:${s.port}`;
 
   afterAll(() => {
     s.stop(true);
@@ -271,7 +271,7 @@ describe("static dashboard (staticDir)", () => {
 });
 
 test("without staticDir non-/api paths are 404", async () => {
-  const res = await fetch(`http://localhost:${server.port}/`);
+  const res = await fetch(`http://127.0.0.1:${server.port}/`);
   expect(res.status).toBe(404);
 });
 
