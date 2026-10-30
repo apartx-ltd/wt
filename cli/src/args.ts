@@ -1,7 +1,7 @@
 /**
- * Разрешить аргумент проекта из позиционных аргументов команды.
- * Multi-repo: первый позиционный — имя проекта, остальные сдвигаются вниз.
- * Single-repo: проект неявный (единственный в workspace), позиционные не сдвигаются.
+ * Resolve the project argument from a command's positional arguments.
+ * Multi-repo: the first positional is the project name, the rest shift down.
+ * Single-repo: the project is implicit (the only one in the workspace), positionals do not shift.
  */
 export function resolveProjectArg(
   positional: string[],

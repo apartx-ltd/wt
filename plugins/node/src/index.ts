@@ -1,17 +1,17 @@
 import { PLUGIN_API_VERSION, mongoDirectConnectionFilter, type StackPlugin } from "#core/plugin";
 
 /**
- * Generic Node plugin (дефолт для bare-репо): `npm install` / `npm run dev -- --port <port>`.
- * Inline env-инъекция (ядро наслаивает .env/.env.worktree), без isolated-db.
+ * Generic Node plugin (the default for a bare repo): `npm install` / `npm run dev -- --port <port>`.
+ * Inline env injection (the core layers .env/.env.worktree), no isolated-db.
  *
- * `docker()` описывает контейнерную раскладку для проектов, объявивших `docker: {image}`
- * в wt.config: репо монтируется в /opt/app, node_modules живёт в именованном томе (иначе
- * host'овые бинарники под macOS не совпадут с linux-контейнером). Никаких meteor-томов —
- * это чистый node-стек. Для host-режима блок не используется.
+ * `docker()` describes the container layout for projects that declare `docker: {image}`
+ * in wt.config: the repo is mounted at /opt/app, node_modules lives in a named volume (otherwise
+ * the host's macOS binaries would not match the linux container). No meteor volumes —
+ * this is a plain node stack. The block is not used in host mode.
  *
- * Флаг прослушивания внешнего интерфейса (`--host` у vite и т.п.) сюда НЕ добавляется:
- * он не универсален для node-стека. Проект, который поднимается в контейнере, объявляет
- * это сам (например `server.host` в vite.config).
+ * The flag for listening on an external interface (`--host` for vite etc.) is NOT added here:
+ * it is not universal across the node stack. A project that runs in a container declares
+ * it itself (e.g. `server.host` in vite.config).
  */
 export const nodePlugin: StackPlugin = {
   name: "node",

@@ -1,6 +1,6 @@
 import { PLUGIN_API_VERSION, mongoDirectConnectionFilter, type StackPlugin } from "#core/plugin";
 
-/** Meteor stack plugin. Поведение — паритет с inline-логикой core до M1 (см. parity.test.ts). */
+/** Meteor stack plugin. Behavior is at parity with the core's inline logic before M1 (see parity.test.ts). */
 export const meteorPlugin: StackPlugin = {
   name: "meteor",
   apiVersion: PLUGIN_API_VERSION,
@@ -8,8 +8,8 @@ export const meteorPlugin: StackPlugin = {
   extraPorts: [{ name: "hmr", basePort: 8085, envKey: "RSPACK_DEVSERVER_PORT" }],
   install: () => ({ argv: ["meteor", "npm", "install"] }),
   artifactDirs: ["node_modules", ".meteor/local"],
-  // Порт: в host-режиме dotenvx инжектит $PORT (shell-переменная), в docker — литерал.
-  // Settings: host = `--settings=<path>`, docker = `--settings <path>` (path даёт ядро через ctx.settingsPath).
+  // Port: in host mode dotenvx injects $PORT (a shell variable), in docker it is a literal.
+  // Settings: host = `--settings=<path>`, docker = `--settings <path>` (the core provides path via ctx.settingsPath).
   envLines: (ctx) => {
     const hmr = ctx.extraPorts?.hmr;
     return hmr === undefined ? [] : [`RSPACK_DEVSERVER_PORT=${hmr}`, `HMR_PUBLIC_PORT=${hmr}`];

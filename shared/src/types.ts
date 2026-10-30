@@ -64,9 +64,9 @@ export type WtEvent =
   | { type: "instances"; instances: MergedInstance[] }
   | { type: "error"; message: string };
 
-/** Метаданные workspace, отдаваемые сервером фронтендам (заголовок и т.п.). */
+/** Workspace metadata the server hands to the frontends (title etc.). */
 export interface WtMeta {
-  /** config.title; null если не задан в wt.config. */
+  /** config.title; null if not set in wt.config. */
   title: string | null;
   /**
    * Workspace root this server drives (its resolved WT_ORCH). Lets a launcher tell

@@ -89,6 +89,6 @@ test("meteor isolatedDb.seed dumps base and restores into the isolated db", asyn
   expect(calls[1]).toContain("--drop");
 });
 
-test("meteor plugin: восстанавливаемые каталоги для wt slim — node_modules и .meteor/local", () => {
+test("meteor plugin: restorable directories for wt slim — node_modules and .meteor/local", () => {
   expect(meteorPlugin.artifactDirs).toEqual(["node_modules", ".meteor/local"]);
 });

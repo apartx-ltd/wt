@@ -17,7 +17,7 @@ test("node plugin: no isolated-db, no extra ports", () => {
   expect(nodePlugin.extraPorts).toBeUndefined();
 });
 
-test("node plugin docker: репо + том node_modules, без meteor-томов", () => {
+test("node plugin docker: repo + node_modules volume, no meteor volumes", () => {
   const spec = nodePlugin.docker!({ worktreeDir: "/wt/app", container: "wtdev-app-slug" } as any);
   expect(spec.mounts).toEqual([
     "/wt/app:/opt/app",
@@ -27,7 +27,7 @@ test("node plugin docker: репо + том node_modules, без meteor-томо
   expect(spec.mounts.some((m) => m.includes("meteor"))).toBe(false);
 });
 
-test("node plugin docker: Mongo-URL получает directConnection (dev-Mongo — replica set)", () => {
+test("node plugin docker: the Mongo URL gets directConnection (the dev Mongo is a replica set)", () => {
   const { envLineFilter } = nodePlugin.docker!({ worktreeDir: "/wt/app", container: "c" } as any);
   expect(envLineFilter!("MONGO_URL=mongodb://devhost:27017/apartx")).toBe(
     "MONGO_URL=mongodb://devhost:27017/apartx?directConnection=true",
@@ -35,11 +35,11 @@ test("node plugin docker: Mongo-URL получает directConnection (dev-Mongo
   expect(envLineFilter!("PUBLIC_ROOT_CATEGORY_ID=abc")).toBe("PUBLIC_ROOT_CATEGORY_ID=abc");
 });
 
-test("node plugin devCommand: без --host — это забота проекта, не стека", () => {
+test("node plugin devCommand: no --host — that is the project's concern, not the stack's", () => {
   const argv = nodePlugin.devCommand({ port: 5173, mode: "docker" } as any).argv;
   expect(argv).not.toContain("--host");
 });
 
-test("node plugin: восстанавливаемый каталог для wt slim — node_modules", () => {
+test("node plugin: restorable directory for wt slim — node_modules", () => {
   expect(nodePlugin.artifactDirs).toEqual(["node_modules"]);
 });
