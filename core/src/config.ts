@@ -172,10 +172,16 @@ export async function resolveProjectConfig(orch: string, project: string): Promi
   const cfg = await loadConfig(orch, basename(orch));
   const pc = cfg.projects[project];
   if (pc) return pc;
-  if (!cfg.defaults.plugin) {
-    throw new Error(`wt.config: project "${project}" is not listed and defaults.plugin is unset`);
-  }
+  if (!cfg.defaults.plugin) throw new UnlistedProjectError(project);
   return deepMerge<ProjectConfig>(cfg.defaults, {}) as ResolvedProjectConfig;
+}
+
+/** A repo under projectsDir that `projects` does not list, with no `defaults.plugin` to run it with. */
+export class UnlistedProjectError extends Error {
+  constructor(readonly project: string) {
+    super(`wt.config: project "${project}" is not listed and defaults.plugin is unset`);
+    this.name = "UnlistedProjectError";
+  }
 }
 
 /** projectsDir of the resolved workspace ("." for single-repo, otherwise "projects"); "projects" when there is no config. */

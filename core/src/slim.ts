@@ -11,7 +11,7 @@ import { listWorktrees } from "./worktrees";
 import { listProjects } from "./projects";
 import { BASE_SLUG } from "./new-worktree";
 import { listRunningInstances } from "./run";
-import { resolveProjectConfig, resolveProjectsDir } from "./config";
+import { resolveProjectConfig, resolveProjectsDir, UnlistedProjectError } from "./config";
 import { loadPlugin, type InstanceCtx } from "./plugin";
 import { containerName } from "./containers";
 import { projectDir } from "./paths";
@@ -81,19 +81,47 @@ export interface SlimPlan {
   orphanVolumes: string[];
 }
 
-export async function collectSlimFacts(orch: string): Promise<SlimPlan> {
+async function dockerVolumes(): Promise<string[]> {
+  const vl = await shOut(["docker", "volume", "ls", "--format", "{{.Name}}"]);
+  return vl.ok ? vl.stdout.split("\n").filter(Boolean) : [];
+}
+
+/** True if the project has a config; false for an unlisted repo with no defaults.plugin. */
+async function isConfigured(orch: string, project: string): Promise<boolean> {
+  try {
+    await resolveProjectConfig(orch, project);
+    return true;
+  } catch (e) {
+    if (e instanceof UnlistedProjectError) return false;
+    throw e;
+  }
+}
+
+/** `listVolumes` is a test seam; default: `docker volume ls`. */
+export async function collectSlimFacts(
+  orch: string,
+  deps: { listVolumes?: () => Promise<string[]> } = {},
+): Promise<SlimPlan> {
   const projectsDir = await resolveProjectsDir(orch);
   const wts = await listWorktrees(orch);
   const running = new Set((await listRunningInstances(orch)).map((i) => `${i.project}/${i.slug}`));
-  const vl = await shOut(["docker", "volume", "ls", "--format", "{{.Name}}"]);
-  const allVolumes = vl.ok ? vl.stdout.split("\n").filter(Boolean) : [];
+  const allVolumes = await (deps.listVolumes ?? dockerVolumes)();
   const existingVolumes = new Set(allVolumes);
 
   // Volume owners are base and every worktrees/<p>/* directory on disk, not just what
   // git listed: a one-off `git worktree list` failure (empty output) would otherwise declare
   // the volumes of all worktrees orphans (which is exactly what happened on 2026-10-20).
   const owned = new Set<string>();
+  const unlisted = new Set<string>();
   for (const p of await listProjects(orch)) {
+    if (!(await isConfigured(orch, p))) {
+      // An unlisted repo (a docs or library repo) has no plugin to ask which volumes are
+      // its own. Returning none would make all of its volumes orphans, so keep every
+      // `wtdev-<p>-*` volume instead (conservative: it may also keep a `<p>-x` project's).
+      unlisted.add(p);
+      for (const v of allVolumes) if (v.startsWith(containerName(p, ""))) owned.add(v);
+      continue;
+    }
     for (const v of await ownedVolumes(orch, p, BASE_SLUG, projectDir(orch, p, projectsDir), "")) owned.add(v);
     const onDisk = await readdir(resolve(orch, "worktrees", p)).catch(() => [] as string[]);
     for (const slug of onDisk)
@@ -102,6 +130,7 @@ export async function collectSlimFacts(orch: string): Promise<SlimPlan> {
 
   const items: SlimItem[] = [];
   for (const w of wts) {
+    if (unlisted.has(w.project)) continue; // no plugin → its artifacts are unknown; volumes kept above
     const plugin = await loadPlugin((await resolveProjectConfig(orch, w.project)).plugin);
     const dirs: SlimFacts["dirs"] = [];
     for (const d of plugin.artifactDirs ?? []) {
