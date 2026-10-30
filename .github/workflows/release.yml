@@ -35,9 +35,7 @@ jobs:
       - name: Test
         run: bun test
 
-      - name: Build web dashboard
-        run: bun run build:web
-
+      # No explicit build:web step: `prepack` builds web/build for both the dry run and the publish.
       - name: Pack (dry run)
         run: bun pm pack --dry-run
 

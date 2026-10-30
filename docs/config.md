@@ -162,11 +162,16 @@ and `wt link` (all upstreams; restart the instance to apply). The overlays stay 
 
 `wt` does not need anything installed in the workspace — the `@apartx/wt` import in
 `wt.config.ts` is resolved by the running `wt` itself. For type checking and completion in an
-editor, add the package as a dev dependency of the workspace (optional, the runtime ignores it):
+editor, add the package as a dev dependency of the workspace (optional, the runtime ignores it),
+together with Bun's types:
 
 ```bash
-bun add -d @apartx/wt
+bun add -d @apartx/wt @types/bun
 ```
+
+The package's `exports` point at its TypeScript sources rather than compiled `.d.ts` files, so a
+type check of `wt.config.ts` follows the import into those sources, which use Bun globals and
+`node:` modules — without `@types/bun` they report errors that are not in your config.
 
 `@apartx/wt` exports `defineWorkspace` and the types `WorkspaceConfig`, `ProjectConfig`,
 `BranchConfig`, `PortsConfig`, `DockerConfig` and `CoreSpec`.
