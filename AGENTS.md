@@ -64,7 +64,8 @@ Run a command against a scratch workspace without installing anything:
   `docs: …`). No attribution trailers.
 - **Release**: bump `version` in `package.json`, add the entry to `History.md`, commit, tag
   `v<version>` and push the tag — `.github/workflows/release.yml` tests, packs and publishes
-  (it refuses a tag that does not match `package.json`).
+  through npm trusted publishing (OIDC, no token; it refuses a tag that does not match
+  `package.json`).
 - Use `git grep`, not `rg` with globs (hangs in some agent sandboxes).
 
 ## Where things can bite
