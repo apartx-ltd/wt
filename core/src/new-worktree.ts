@@ -228,6 +228,10 @@ export async function createWorktree(
   if (!existsSync(resolve(pdir, ".git"))) throw new Error(`no such project: ${project} (expected ${pdir})`);
   const dir = resolve(orch, "worktrees", project, slug);
   if (existsSync(dir)) throw new Error(`worktree already exists: ${dir}`);
+  // Resolve the plugin before touching git: a bad plugin id (e.g. a renamed one) must not
+  // leave a half-made worktree and branch behind.
+  const config = await resolveProjectConfig(orch, project);
+  const plugin = await loadPlugin(config.plugin);
 
   // Branch name and fork point come from config.branches (M2.5). The prefix governs slug↔branch,
   // base is the starting point of the new branch (apartx: "develop"), not the current HEAD of the base
@@ -250,8 +254,6 @@ export async function createWorktree(
     await sh(["git", "-C", dir, "submodule", "update", "--init", "--recursive"]);
   }
 
-  const config = await resolveProjectConfig(orch, project);
-  const plugin = await loadPlugin(config.plugin);
   const cn = containerName(project, slug);
   // install: the plugin describes the command; the core executes it (host — in the worktree directory,
   // docker — inside `docker run --rm` with the same volumes/image as on start).

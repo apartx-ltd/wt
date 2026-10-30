@@ -157,7 +157,8 @@ that started it.
 
 Plugin ids are package specifiers: `"@apartx/wt/plugin-node"` and `"@apartx/wt/plugin-meteor"`.
 **Migrating from the pre-release ids:** `"@wt/plugin-node"` and `"@wt/plugin-meteor"` are no
-longer accepted — `wt` stops with a `renamed to …` error; replace them in `wt.config.ts`.
+longer accepted — `wt` stops with a `renamed to …` error before it creates anything (no
+worktree or branch is left behind); replace them in `wt.config.ts`.
 
 ## Development
 

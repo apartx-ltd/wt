@@ -385,3 +385,25 @@ test("createWorktree: branch uses configured prefix and forks from branches.base
     rmSync(orch, { recursive: true, force: true });
   }
 });
+
+test("createWorktree: an unloadable plugin fails before git is touched (no worktree, no branch)", async () => {
+  const orch = await makeForkOrch();
+  const pdir = resolve(orch, "projects", "proj");
+  // Same fixture, but the project uses a legacy plugin id that loadPlugin rejects.
+  writeFileSync(
+    resolve(orch, "wt.config.ts"),
+    `import { defineWorkspace } from ${JSON.stringify(CONFIG_SRC)};
+export default defineWorkspace({
+  branches: { base: "develop", prefix: "feature/" },
+  projects: { "proj": { plugin: "@wt/plugin-node" } },
+});
+`,
+  );
+  try {
+    await expect(createWorktree(orch, "proj", "legacy")).rejects.toThrow(/was renamed/);
+    expect(existsSync(resolve(orch, "worktrees", "proj", "legacy"))).toBe(false);
+    expect(await git(pdir, "branch", "--list", "feature/legacy")).toBe("");
+  } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
+});
