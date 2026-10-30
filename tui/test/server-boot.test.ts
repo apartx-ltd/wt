@@ -152,3 +152,27 @@ test("a 404 on / is not stale when the static build is absent or not requested",
     expect(res.replaced).toBe(false);
   }
 });
+
+test("a transient /api/meta failure is retried once before replacing a healthy daemon", async () => {
+  let killed = false;
+  let metaCalls = 0;
+  const deps = currentDeps({
+    fetchMeta: async () => (++metaCalls === 1 ? null : { title: null, orch: ORCH }),
+    killPort: async () => { killed = true; },
+  });
+  const res = await ensureServer(OPTS, deps);
+  expect(metaCalls).toBe(2);
+  expect(killed).toBe(false);
+  expect(res.replaced).toBe(false);
+});
+
+test("/api/meta failing twice replaces the daemon", async () => {
+  let killed = false;
+  const deps = currentDeps({
+    fetchMeta: async () => null,
+    killPort: async () => { killed = true; },
+  });
+  const res = await ensureServer(OPTS, deps);
+  expect(killed).toBe(true);
+  expect(res.replaced).toBe(true);
+});

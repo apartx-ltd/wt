@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { packageRoot, resolveOrch } from "#core";
+import { packageRoot, resolveOrch, webBuildDir } from "#core";
 import { ensureServer } from "../../tui/src/server-boot";
 
 /**
@@ -27,12 +27,15 @@ export async function runTui(extra: string[], opts: { orch?: string } = {}): Pro
     stderr: "inherit",
     env,
   });
-  return proc.exited;
-}
-
-/** The built web dashboard (`bun run build:web`), served by wt-server itself. */
-export function webBuildDir(root = packageRoot()): string {
-  return resolve(root, "web/build");
+  // Forward termination signals so the TUI restores the terminal instead of being orphaned.
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+  const forward = (sig: NodeJS.Signals) => proc.kill(sig);
+  for (const sig of signals) process.on(sig, forward);
+  try {
+    return await proc.exited;
+  } finally {
+    for (const sig of signals) process.off(sig, forward);
+  }
 }
 
 /**
@@ -40,7 +43,10 @@ export function webBuildDir(root = packageRoot()): string {
  * print its URL and wait for Ctrl-C. `dev` instead runs the SvelteKit dev server in
  * `web/`, which proxies same-origin /api to WT_SERVER_PORT (see web/vite.config.ts).
  */
-export async function runWeb(opts: { dev: boolean; root?: string; orch?: string }): Promise<number> {
+export async function runWeb(
+  opts: { dev: boolean; root?: string; orch?: string },
+  deps: { ensureServer?: typeof ensureServer } = {},
+): Promise<number> {
   const root = opts.root ?? packageRoot();
   const port = Number(process.env.WT_SERVER_PORT ?? 4499);
   const staticDir = webBuildDir(root);
@@ -50,8 +56,15 @@ export async function runWeb(opts: { dev: boolean; root?: string; orch?: string 
     );
     return 1;
   }
+  // web/ sources (vite config, package.json) are not in the npm package — only web/build is.
+  if (opts.dev && !existsSync(resolve(root, "web/package.json"))) {
+    process.stderr.write(
+      "wt web --dev: needs a wt source checkout (web/ is not shipped in the npm package) — clone github.com/apartx-ltd/wt and run it from there\n",
+    );
+    return 1;
+  }
 
-  const { baseUrl, spawned, replaced } = await ensureServer({
+  const { baseUrl, spawned, replaced } = await (deps.ensureServer ?? ensureServer)({
     port,
     serverEntry: resolve(root, "server/src/index.ts"),
     orch: opts.orch ?? resolveOrch(),
@@ -97,13 +110,19 @@ async function runViteDev(o: {
   console.log(`wt-server: ${baseUrl}${replaced ? " (replaced stale)" : ""}`);
   console.log(`wt web:    http://localhost:${webPort}`);
 
-  const vite = Bun.spawn([process.execPath, "run", "dev", "--", "--port", String(webPort)], {
-    cwd: resolve(root, "web"),
-    env: { ...process.env, WT_SERVER_PORT: String(port) },
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
+  let vite: import("bun").Subprocess;
+  try {
+    vite = Bun.spawn([process.execPath, "run", "dev", "--", "--port", String(webPort)], {
+      cwd: resolve(root, "web"),
+      env: { ...process.env, WT_SERVER_PORT: String(port) },
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+  } catch (e) {
+    killSpawned(); // don't orphan the daemon we just started
+    throw e;
+  }
   const cleanup = () => {
     try {
       vite.kill();

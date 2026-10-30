@@ -19,16 +19,21 @@ export function resolveOrch(
   env: Record<string, string | undefined> = process.env,
   cwd: string = process.cwd(),
 ): string {
-  if (env.WT_ORCH) return canonical(env.WT_ORCH);
+  if (env.WT_ORCH) return canonicalPath(env.WT_ORCH);
   for (let dir = resolve(cwd); ; dir = dirname(dir)) {
-    if (existsSync(resolve(dir, "wt.config.ts"))) return canonical(dir);
+    if (existsSync(resolve(dir, "wt.config.ts"))) return canonicalPath(dir);
     if (dirname(dir) === dir) throw new WorkspaceNotFoundError(cwd);
   }
 }
 
 /** Root of the `@apartx/wt` package (core/src → two levels up). */
 export function packageRoot(): string {
-  return canonical(resolve(dirname(fileURLToPath(import.meta.url)), "..", ".."));
+  return canonicalPath(resolve(dirname(fileURLToPath(import.meta.url)), "..", ".."));
+}
+
+/** The built web dashboard (`bun run build:web`), served by wt-server itself. */
+export function webBuildDir(root = packageRoot()): string {
+  return resolve(root, "web/build");
 }
 
 /**
@@ -36,7 +41,7 @@ export function packageRoot(): string {
  * строчной буквой, а git отдаёт пути worktree в настоящем регистре — префиксные сравнения
  * (listWorktrees) молча не совпадали, и `wt list`/`slim` видели 0 worktree.
  */
-function canonical(path: string): string {
+export function canonicalPath(path: string): string {
   try {
     return realpathSync.native(path);
   } catch {

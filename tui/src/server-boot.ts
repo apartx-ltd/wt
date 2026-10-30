@@ -1,6 +1,7 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { WT_PROTOCOL_VERSION, type WtMeta } from "#shared";
+import { canonicalPath } from "#core";
 
 /** GET /api/health → its `version`, or null if absent/unreachable/malformed. */
 export async function fetchServerVersion(baseUrl: string): Promise<number | null> {
@@ -144,8 +145,13 @@ export async function ensureServer(opts: SpawnOpts, deps: BootDeps = {}): Promis
   const baseUrl = `http://localhost:${opts.port}`;
 
   const isReusable = async (): Promise<boolean> => {
-    const meta = await fetchMeta(baseUrl);
-    if (typeof meta?.orch !== "string" || canonical(meta.orch) !== canonical(opts.orch)) return false;
+    // One retry: a transient /api/meta failure must not replace a healthy daemon.
+    let meta = await fetchMeta(baseUrl);
+    if (meta === null) {
+      await sleep(100);
+      meta = await fetchMeta(baseUrl);
+    }
+    if (typeof meta?.orch !== "string" || canonicalPath(meta.orch) !== canonicalPath(opts.orch)) return false;
     const wantsStatic = !!opts.staticDir && existsSync(resolve(opts.staticDir, "index.html"));
     return !(wantsStatic && (await rootStatus(baseUrl)) === 404);
   };
@@ -166,13 +172,4 @@ export async function ensureServer(opts: SpawnOpts, deps: BootDeps = {}): Promis
     await sleep(100);
   }
   throw new Error("wt-server did not come up");
-}
-
-/** Real path when it exists (the server reports its WT_ORCH canonicalized), else as given. */
-function canonical(path: string): string {
-  try {
-    return realpathSync.native(path);
-  } catch {
-    return resolve(path);
-  }
 }
