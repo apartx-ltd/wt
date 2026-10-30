@@ -1,215 +1,200 @@
-# `wt` — worktree orchestrator engine
+# wt
 
-A Bun + TypeScript engine for **multi-branch development**: it creates isolated git
-worktrees, allocates deterministic ports, layers per-worktree env, wires cross-service
-meshes, and runs/​stops dev instances (host process or Docker container). The stack-specific
-parts (how to install, how to run, docker mounts, isolated DB seeding) live in **plugins**;
-the core is generic and config-driven.
+**Multi-branch development with git worktrees.** `wt` gives every branch of every service its
+own git worktree, a deterministic port, a per-worktree env layered over the project's `.env`,
+and links to the same-branch worktrees of the services it talks to. Instances run as host
+processes or Docker containers, side by side with the base checkouts, so you can work on a
+feature, review a colleague's branch and keep `main` running at the same time — without
+editing env files or picking ports by hand.
 
-This is the engine behind the `./scripts/wt` wrapper at the orchestrator root. **For
-day-to-day use, call `./scripts/wt …`, not these packages directly** — see
-[docs/worktree.md](../../docs/worktree.md) for the user-facing workflow and rules.
+The engine is generic and driven by one `wt.config.ts` at the workspace root. What is
+stack-specific (how to install dependencies, how to start the dev server, Docker mounts,
+isolated databases) lives in plugins; Node and Meteor plugins are bundled. A terminal UI
+(`wt ui`) and a web dashboard (`wt web`) show what runs where.
 
-## Layout
+## Install
 
-A Bun workspace (`bun install` at this directory installs all packages):
-
-| Package | Name | Responsibility |
-|---------|------|----------------|
-| `shared/` | `@wt/shared` | Cross-cutting helpers/types shared by all packages |
-| `core/` | `@wt/core` | Generic engine: worktrees, port ledger, run-state, env generation, config + plugin contract |
-| `cli/` | `@wt/cli` | The `wt` command-line entrypoint (`cli/bin/wt.ts`) |
-| `server/` | `@wt/server` | HTTP/JSON status server backing the web dashboard |
-| `tui/` | `@wt/tui` | Full-screen terminal UI (opentui/SolidJS) — `wt ui` |
-| `web/` | `@wt/web` | Web dashboard (SvelteKit + apartx-ui) — `wt web` |
-| `plugins/meteor/` | `@apartx/wt/plugin-meteor` | Meteor stack plugin (install/run/docker/isolated-db) |
-| `plugins/node/` | `@apartx/wt/plugin-node` | Generic Node stack plugin (`npm install` / `npm run dev -- --port`, inline env) — default for bare repos |
-| `plugins/registry/` | `@wt/plugins` | Bundled-plugin registry (`registerBundledPlugins()`), wired at entrypoints |
-
-**Dependency direction** (acyclic): `cli/server/tui → @wt/plugins → {@wt/core, @apartx/wt/plugin-meteor}`,
-`@apartx/wt/plugin-meteor → @wt/core → @wt/shared`. The core **never imports a plugin** — plugins are
-resolved at runtime from a registry, so the engine stays stack-agnostic.
-
-## Commands
-
-Run via the wrapper (`./scripts/wt <cmd>`); the CLI dispatches every command except `ui`/`web`
-(which `cd` into their package dir and run directly).
-
-```
-new <project> <slug> [--isolated-db] [--seed]   create worktree + branch + install + .env.worktree
-start <project> [slug] [--link|--server [slug]] run an instance in the background
-run <project> [slug] [--link|--server [slug]]   run in the foreground (live logs, Ctrl-C)
-restart <project> [slug]                         restart an instance
-stop <project> [slug] | stop --all               stop instance(s)
-up / down                                         start/stop the core stack
-reap                                              remove all dev containers (docker mode)
-logs <project> [slug] [-f] | logs --all          tail instance logs
-rm <project> <slug> [--branch]                   remove a worktree
-link / unlink <project> <slug> [link-slug]       repoint cross-service upstreams (mesh)
-port <project> [slug]                             print the allocated port
-list / ps / projects                             list worktrees / running instances / projects
-ui                                                full-screen TUI dashboard
-web                                               web dashboard (wt-server + vite dev)
-help                                              command help
+```bash
+bun install -g @apartx/wt
+wt --version
 ```
 
-## Configuration
+Requirements:
 
-The workspace is described declaratively in `<orchestrator-root>/wt.config.ts`. Each project
-selects a `StackPlugin`; defaults are deep-merged into every project:
+- [Bun](https://bun.sh) 1.3 or newer — `wt` runs on Bun only (Node is not supported).
+  `~/.bun/bin` must be on your `PATH`.
+- git.
+- Optional: Docker, for projects that declare `docker: { image }` (see
+  [Limitations](#limitations) for the macOS specifics of docker mode).
+
+`wt --version` and `wt help` work anywhere. Every other command needs a workspace: `wt` walks up
+from the current directory to the first `wt.config.ts` (the way git finds `.git`), so it works
+from any subdirectory of the workspace. `WT_ORCH=<dir>` overrides the search. Outside a
+workspace it prints `wt: no wt.config.ts found …` and exits with code 1.
+
+## Quick start
+
+A workspace with three services — an API, a storefront and an admin panel — each in its own
+git repository:
+
+```
+my-shop/
+├── wt.config.ts
+└── projects/
+    ├── api/          git repo, .env: PORT=3000
+    ├── storefront/   git repo, .env: PORT=3100, API_URL=http://localhost:3000
+    └── admin/        git repo, .env: PORT=3200, API_URL=http://localhost:3000
+```
+
+`wt` reads two things from each project's own `.env` (in the base checkout under `projects/`):
+the base `PORT` (or a `PORT=NN` / `--port NN` / `-p NN` in `package.json`), and the current
+value of every key a link rewrites (`API_URL` here). With the bundled Node plugin a project is
+started with `npm run dev -- --port <port>`, so its `dev` script has to honor `--port`.
+
+`my-shop/wt.config.ts`:
 
 ```ts
-import { defineWorkspace } from "./tools/wt/core/src/config";
+import { defineWorkspace } from "@apartx/wt";
 
 export default defineWorkspace({
-  projectsDir: "projects",                       // multi-repo (or `project: {…}` for single-repo)
-  ports: { step: 10 },
-  branches: { base: "develop", prefix: "feature/" },
-  defaults: { plugin: "@apartx/wt/plugin-meteor" },
+  title: "my-shop",
+  projectsDir: "projects",
+  serverProject: "api",
+  branches: { base: "main", prefix: "feature/" },
+  defaults: { plugin: "@apartx/wt/plugin-node" },
   projects: {
-    "apartx-server":  { docker: { image: "meteor-dev:3.4" }, core: { slug: "base" } },
-    "apartx-spaces":  {},                          // host-mode meteor (no docker)
+    api: { core: { slug: "base" } },
+    storefront: {},
+    admin: {},
   },
-  links: ["apartx-cabinet:apartx-server:env:SERVER_URL", /* … */],
+  links: ["storefront:api:env:API_URL", "admin:api:env:API_URL"],
 });
 ```
 
-A project not listed in the config falls back to constants-derived defaults, so every repo
-under `projectsDir` keeps working without being enumerated.
+The workspace needs no `node_modules`: the installed `wt` resolves the `@apartx/wt` import to
+itself. Then, from anywhere inside `my-shop/`:
 
-### Plugins (`StackPlugin`)
-
-A plugin **describes**, the core **executes**. A plugin returns command descriptors
-(`{argv}`), env lines, docker mounts, and isolated-db helpers; the core builds the dotenvx /
-docker wrappers and runs them. Key surface (see `core/src/plugin.ts`):
-
-```ts
-interface StackPlugin {
-  name: string;
-  envInjection?: "dotenvx" | "inline";
-  install(ctx): Command;
-  devCommand(ctx): Command;                       // mode-aware: host "$PORT" vs docker literal
-  envLines?(ctx): string[];
-  extraPorts?: string[];                          // e.g. ["hmr"] — core allocates one per name
-  settingsFile?(ctx): string;
-  isolatedDb?: { urlEnvKey; deriveUrl; seed? };
-  docker?(ctx): { mounts; addHosts?; ownedVolumes? };
-}
+```bash
+wt projects                            # admin, api, storefront
+wt new api my-feature                  # worktrees/api/my-feature on branch feature/my-feature, PORT=3010
+wt new storefront my-feature           # worktrees/storefront/my-feature, PORT=3120
+wt start api my-feature                # background instance on :3010
+wt start storefront my-feature --link  # on :3120, with API_URL=http://localhost:3010
+wt ps                                  # what runs, on which port
+wt ui                                  # full-screen terminal dashboard
+wt web                                 # web dashboard on http://localhost:4499
+wt down                                # stop everything
 ```
 
-Bundled plugins are registered in `plugins/registry` and exposed via `registerBundledPlugins()`,
-called once at each process entrypoint.
+`--link` repoints all upstreams of the storefront (the `links` that name it as the consumer) at
+the same-slug worktrees, so the feature branch of the storefront talks to the feature branch of
+the API while `main` keeps talking to `main`. `--server` does the same for the `serverProject`
+upstream only. A worktree's port is its project's base port plus an offset; offsets are unique
+across the workspace, recorded in `var/worktree-ports.tsv`, and stay reserved after `wt rm`, so
+a branch gets the same port every time.
 
-### `.env.worktree` lifecycle (self-heal on start)
+Add `var/` and `worktrees/` to the workspace's `.gitignore` if the workspace itself is a git
+repository — that is where `wt` keeps its state and the worktrees.
 
-`wt start` / `wt run` **regenerate** a worktree's `.env.worktree` on every start: the
-wt-managed keys (`PORT`, `ROOT_URL`, the plugin's `envLines`/`worktreeEnvTail`, and — only
-when already present — the isolated-DB `urlEnvKey`) are rewritten to current deterministic
-values, while the isolated-DB `MONGO_URL` and any manual/non-managed keys are **preserved
-verbatim**. Isolated-vs-shared is inferred from whether the URL key is present, so a
-regenerate **never** flips a worktree between isolated and shared databases. The regenerate is
-idempotent on a canonically-generated file, so fresh worktrees are byte-identical — only
-stale/legacy files (e.g. those written by the old `scripts/worktree-env.sh`, missing the HMR
-keys) get healed. For persistent custom env prefer the `var/env/<p>-<slug>.env` link overlay,
-which wins over `.env.worktree`. Base checkouts (slug `base`, no `.env.worktree`) get the
-plugin's HMR env injected at `docker run` time (`-e`).
+## Commands
+
+`<p>` is a project (a directory under `projectsDir`). Without a slug a command acts on the base
+checkout `projects/<p>` (slug `base`). In a single-repo workspace `<p>` is implied and omitted:
+`wt new <slug>`, `wt start [slug]`.
+
+| Command | Description |
+|---------|-------------|
+| `wt new <p> <slug> [--isolated-db [--seed]]` | create worktree + branch + install + env |
+| `wt run <p> [slug] [--link\|--server [slug]]` | run in the foreground (Ctrl-C, host projects only) |
+| `wt start <p> [slug] [--link\|--server [slug]]` | run in the background (host: pidfile + log / dockerized: container) |
+| `wt stop <p> [slug] \| --all` | stop an instance / all of them |
+| `wt restart <p> [slug]` | stop + start |
+| `wt up` | start the core stack (projects with `core` in `wt.config.ts`) |
+| `wt down` | stop every running instance |
+| `wt ps [--json]` | running instances |
+| `wt list [--json]` | existing worktrees |
+| `wt logs <p> [slug] [-f] \| --all` | logs of background instance(s) |
+| `wt link <p> <slug> [slug]` | point the project at its upstreams' worktrees (`links` in `wt.config.ts`) |
+| `wt unlink <p> <slug>` | restore `settings.json`/`.env` from the repository |
+| `wt rm <p> <slug> [--branch]` | remove a worktree (+ optionally its branch) |
+| `wt reap` | remove all `wtdev-*` dev containers |
+| `wt sweep [--apply] [--json]` | remove worktrees whose branches are merged (GitLab merge requests via `glab`; without `--apply` = plan) |
+| `wt slim [--apply] [--json]` | remove restorable artifacts (dependencies, build caches, docker volumes) in all stopped worktrees + orphan volumes (without `--apply` = plan) |
+| `wt port <p> [slug] [--json]` | print the allocated port |
+| `wt projects [--json]` | list projects |
+| `wt ui` | full-screen TUI dashboard |
+| `wt web [--dev]` | web dashboard (built static; `--dev` runs vite dev) |
+| `wt version \| --version` | wt version |
+
+The optional slug after `--link`/`--server` links to the upstreams' worktrees of a *different*
+slug. Most commands also accept `--json`. `WT_DEBUG=1` prints the stack trace of an error.
+
+## Dashboards
+
+`wt ui` is a full-screen terminal dashboard: the worktrees and base checkouts of the workspace
+with live status, and keys to start, stop, restart, link, unlink, create and remove worktrees and to
+tail logs. `wt web` shows the same live instance list in the browser.
+
+Both talk to a small HTTP daemon, the wt-server, on `WT_SERVER_PORT` (default `4499`), which
+also serves the prebuilt web dashboard; `wt web` prints its URL and keeps running until Ctrl-C.
+`wt web --dev` runs the dashboard's vite dev server on `WT_WEB_PORT` (default `5199`) instead;
+it needs a source checkout of `wt` (the `web/` sources are not in the npm package).
+
+**How the dashboard daemon works.** There is one daemon per port, and it is bound to one
+workspace. `wt ui`/`wt web` reuse a running daemon only if it speaks the current protocol,
+drives the same workspace and serves the dashboard; otherwise they replace it. So a `wt ui` or
+`wt web` started in another workspace takes over the port, and a dashboard still open for the
+first workspace starts showing the second one. To watch two workspaces at once, give one of
+them another port: `WT_SERVER_PORT=4498 wt ui`. The daemon lives as long as the `wt ui`/`wt web`
+that started it.
+
+## Configuration
+
+- [docs/config.md](docs/config.md) — the `wt.config.ts` reference: every field, single-repo vs
+  multi-repo, `links`, `env` templates, editor types and the JSON schema.
+- [docs/plugins.md](docs/plugins.md) — the `StackPlugin` contract, the bundled Node and Meteor
+  plugins, env layering and the `.env.worktree` lifecycle.
+
+Plugin ids are package specifiers: `"@apartx/wt/plugin-node"` and `"@apartx/wt/plugin-meteor"`.
+**Migrating from the pre-release ids:** `"@wt/plugin-node"` and `"@wt/plugin-meteor"` are no
+longer accepted — `wt` stops with a `renamed to …` error; replace them in `wt.config.ts`.
 
 ## Development
 
 ```bash
-bun install                       # from tools/wt — installs all workspace packages
-bun test                          # full suite
-bun run typecheck                 # bunx tsc --noEmit
+git clone https://github.com/apartx-ltd/wt && cd wt
+bun install        # also fetches the web dashboard's UI kit from GitHub (needs network + git)
+bun link           # the global `wt` now runs this checkout — TypeScript directly, no build step
 ```
 
-**Gate (must pass before commit):** `cd tools/wt && bun test && bun run typecheck`.
-
-> After pulling changes that add/rename a workspace package, run `bun install` again to
-> materialize the new symlinks — otherwise tests fail with `Cannot find module '@wt/…'`.
-
-## Status & roadmap
-
-The engine is a strangler migration of the legacy bash `wt` (`scripts/wt-legacy`, removed in
-earlier M4 work). Config + plugin foundation is complete:
-
-- **M0+M1 (done):** `StackPlugin` interface + config layer; all Meteor specifics extracted into
-  `@apartx/wt/plugin-meteor`; apartx runs through the config+plugin path with byte-identical behavior.
-- **M2 (done):** `DOCKERIZED`/`DEV_IMAGE` deleted — dockerized detection and image come from `config.docker.image`.
-- **M2.5 (done):** branch convention (`branches.{base,prefix}`), core stack (`core.slug`), and link mesh (`links`) all come from config; the base-checkout slug is renamed `"main"`→`"base"` (one-time run-state migration); `wt new` forks explicitly from `branches.base`, and `wt up` starts the base checkouts of the core projects.
-- **M2.6 (done):** plugin↔core boundary hermeticized (parity, byte-identical via `parity.test.ts`) — `METEOR_WATCH_*` → `plugin.docker().env`, mongo `directConnection` → `plugin.docker().envLineFilter`, `MONTI_*`/`MONGO_OPLOG_URL=`/isolated-`MONGO_URL` → `plugin.worktreeEnvTail()` + `isolatedDb.deriveUrl`, and `StartOptions.link` relaxed `"all"|"apartx-server"`→`"all"|string` (last apartx literal out of core); HMR base-port generalization deferred to M3.
-- **M3 (done):** `@apartx/wt/plugin-node` shipped (generic `npm install` / `npm run dev -- --port`, inline env); the hardcoded HMR port generalized into a stack-agnostic `ExtraPortSpec` (meteor declares its own `hmr`/`8085`/`RSPACK_DEVSERVER_PORT`, core has zero stack literals); inline env-injection layers `.env`/`.env.worktree` in core so a non-`dotenvx` plugin runs detached; single-repo path resolution (`projectsDir "."` → repo root) wired through `new`/`start`/`port`/`list`; proven end-to-end by `core/test/single-repo.test.ts` driving a bare node repo with zero apartx knowledge.
-- **M4 (done):** OSS polish (*pragmatic core*) — plugin `apiVersion` + load-time compat check,
-  configurable workspace `title` surfaced to both frontends, config-driven (de-hardcoded)
-  `--server` link target (`config.serverProject`), single-repo CLI ergonomics (drop the
-  redundant `<project>` arg), and a published `wt.config` JSON Schema. `wt-legacy` removal and
-  config/plugin type exports (`@wt/core/config`, `@wt/core/plugin`) were already done earlier.
-  **Deferred** (only pay off after repo extraction): npm plugin-resolution (the bundled
-  registry stays), out-of-tree single-repo worktrees (worktrees stay in `orch/worktrees/`),
-  and `settings:`-mechanism genericization for non-Meteor. See the subsections below.
-
-### M4 features
-
-#### Plugin `apiVersion`
-
-The plugin↔core contract is versioned. `@wt/core/plugin` exports `PLUGIN_API_VERSION` (`= 1`)
-and `StackPlugin` gains an optional `apiVersion?: number`. `loadPlugin` enforces it as
-**required at load time**: it throws unless `plugin.apiVersion === PLUGIN_API_VERSION` (the
-type is optional only so inline test fakes that bypass `loadPlugin` keep compiling). A future
-core bump can refuse an incompatible third-party plugin instead of misbehaving silently.
-Bundled plugins declare it:
-
-```ts
-import { PLUGIN_API_VERSION, type StackPlugin } from "@wt/core/plugin";
-
-export const myPlugin: StackPlugin = {
-  name: "my-stack",
-  apiVersion: PLUGIN_API_VERSION,
-  // …install/devCommand/…
-};
-```
-
-#### Configurable `title`
-
-`wt.config.title` is surfaced to both frontends via the server: `GET /api/meta` returns
-`{ title }`, the `@wt/shared` client exposes `getMeta()`, and the TUI + web dashboard render
-`wt · <title>` (fallback `wt · worktrees` when unset). Frontends never read the filesystem —
-the server is the single place that loads `wt.config`.
-
-#### Config-driven `--server`
-
-`--server` is a shorthand for repointing the cabinet-style upstream at a specific project's
-same-slug worktree. Its target now comes from config instead of a hardcoded literal — set
-`serverProject` in `wt.config.ts`:
-
-```ts
-export default defineWorkspace({
-  // …
-  serverProject: "apartx-server",   // `wt start <project> <slug> --server` links this upstream
-});
-```
-
-`wt start … --server` resolves `serverProject` and dies if it is unset. (`--link` still
-repoints *all* configured upstreams.)
-
-#### Single-repo CLI ergonomics
-
-In a single-repo workspace (`projectsDir: "."` with one project) the `<project>` arg is
-implicit — it's the repo itself — so it can be omitted:
+Edits take effect on the next `wt` invocation; there is nothing to reinstall.
 
 ```bash
-wt new <slug>          # multi-repo: wt new <project> <slug>
-wt start [slug]        # multi-repo: wt start <project> [slug]
-wt port [slug]         # …and likewise for run/restart/stop/logs/rm/link/unlink/port
+bun test               # unit and integration tests
+bun run typecheck      # tsc --noEmit
+bun run e2e            # TUI end-to-end flows
+bun run build:web      # build the web dashboard into web/build (served by `wt web`)
+wt web --dev           # web dashboard with hot reload (vite dev server)
 ```
 
-Multi-repo workspaces (e.g. apartx) are unchanged — the first positional is still the project.
+The dashboard's UI kit (`apartx-ui`) is a git `devDependency` of `web/`, pinned to a commit, so
+`bun install` in a checkout needs network access to GitHub. The published package does not
+depend on it: `web/build` ships prebuilt in the tarball (`prepack` runs `build:web`).
 
-#### JSON Schema for `wt.config`
+## Limitations
 
-A draft-07 JSON Schema for the workspace config lives at `core/schema/wt.config.schema.json`
-and is exported as `@wt/core/config-schema`. Configs remain `.ts` (typed via `defineWorkspace`);
-the schema is for **external tooling** (editors, validators, generators) that can't consume the
-TypeScript types directly.
+- **Bun only.** The CLI, the TUI and the server run on Bun; Node is not supported.
+- **`wt sweep` is GitLab-only.** It checks merge requests on gitlab.com through the `glab` CLI;
+  GitHub pull requests are not supported yet.
+- **Docker mode is macOS-only for now.** A container reaches services on the host by the
+  machine's mDNS name (`<LocalHostName>.local`), which `wt` reads with macOS's `scutil`; docker
+  mode on Linux is untested and not expected to work yet. Replacing a dashboard daemon finds the
+  process on the port with `lsof`.
+- **No third-party plugins yet.** The plugin registry knows only the bundled plugins; loading a
+  plugin from another package is planned.
+- **The wt-server has no authentication** and listens on all interfaces. It can start and stop
+  instances and remove worktrees — use it on a trusted machine and network.
 
-Design + plans: [docs/plans/2026-06-21-wt-universal-plugin/](../../docs/plans/2026-06-21-wt-universal-plugin/),
-[docs/plans/2026-06-20-wt-engine-port/](../../docs/plans/2026-06-20-wt-engine-port/).
+## License
+
+[MIT](LICENSE)

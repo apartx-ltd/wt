@@ -2,6 +2,7 @@
   "name": "@apartx/wt",
   "version": "0.1.0",
   "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/apartx-ltd/wt.git" },
   "type": "module",
   "bin": { "wt": "./cli/bin/wt.ts" },
   "exports": {
@@ -37,6 +38,7 @@
     "tsconfig.json",
     "tsconfig.base.json",
     "README.md",
+    "docs",
     "LICENSE",
     "History.md"
   ],

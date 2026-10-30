@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://apartx.dev/wt.config.schema.json",
   "title": "wt workspace config",
-  "description": "Declarative configuration for the universal wt orchestrator (see tools/wt/core/src/config.ts WorkspaceConfig).",
+  "description": "Declarative configuration for the universal wt orchestrator (see core/src/config.ts WorkspaceConfig).",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -60,7 +60,7 @@
         "plugin": { "type": "string", "description": "Plugin package name; falls back to defaults.plugin." },
         "docker": { "$ref": "#/definitions/dockerConfig", "description": "Present => dockerized; image is the sole source." },
         "core": { "$ref": "#/definitions/coreSpec", "description": "Present => part of the core stack (wt up/down)." },
-        "env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Declarative env templates (values may contain ${port}/${offset})." }
+        "env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Declarative env templates (values may contain ${port}/${offset}/${branchSuffix})." }
       }
     }
   }
