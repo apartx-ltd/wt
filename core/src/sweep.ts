@@ -2,7 +2,7 @@
 // Истина о «смержено» — состояние MR (squash-мержи делают git-ancestry бесполезной).
 // classifySweep — чистая функция над собранными фактами; сеть/git только в сборщике.
 
-import type { Worktree } from "@wt/shared";
+import type { Worktree } from "#shared";
 import { listWorktrees } from "./worktrees";
 import { listRunningInstances } from "./run";
 import { removeWorktree } from "./new-worktree";

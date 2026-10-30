@@ -3,8 +3,8 @@
   import { Page, Header, Toolbar, Title, Content } from "apartx-ui/structure";
   import { List, Item, ListHeader } from "apartx-ui/data";
   import { Loading } from "apartx-ui/display";
-  import type { MergedInstance, RunStatus, WtEvent } from "@wt/shared";
-  import { sections } from "@wt/shared";
+  import type { MergedInstance, RunStatus, WtEvent } from "#shared";
+  import { sections } from "#shared";
   import { getWtClient } from "$lib/wtClient";
 
   let instances = $state<MergedInstance[]>([]);

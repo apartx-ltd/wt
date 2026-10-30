@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { meteorPlugin } from "../src/index";
-import { PLUGIN_API_VERSION } from "@wt/core/plugin";
+import { PLUGIN_API_VERSION } from "#core/plugin";
 
 test("meteor plugin declares the current apiVersion", () => {
   expect(meteorPlugin.apiVersion).toBe(PLUGIN_API_VERSION);

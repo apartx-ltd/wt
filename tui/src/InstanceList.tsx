@@ -1,7 +1,7 @@
 import { For, createMemo, createEffect } from "solid-js";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
-import type { MergedInstance } from "@wt/shared";
-import { sections } from "@wt/shared";
+import type { MergedInstance } from "#shared";
+import { sections } from "#shared";
 import { statusDot, uptime } from "./format";
 import { fitCell, columnWidth } from "./columns";
 import { selectedLine, clampScrollTop, wheelSelectionDelta } from "./scroll";

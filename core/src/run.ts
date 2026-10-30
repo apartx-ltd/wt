@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { readdir, unlink, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import type { RunInstance } from "@wt/shared";
+import type { RunInstance } from "#shared";
 import { runDir, runFilePath, logFilePath, worktreeDir } from "./paths";
 import { dockerRemove, dockerPs } from "./containers";
 

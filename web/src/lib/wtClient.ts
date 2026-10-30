@@ -1,4 +1,4 @@
-import { HttpWtClient } from "@wt/shared";
+import { HttpWtClient } from "#shared";
 
 /**
  * Browser-side wt-server client. Base URL is same-origin ("") by default — Vite

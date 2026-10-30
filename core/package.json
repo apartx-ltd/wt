@@ -1,8 +1,0 @@
-{
-  "name": "@wt/core",
-  "version": "0.0.0",
-  "type": "module",
-  "exports": { ".": "./src/index.ts", "./plugin": "./src/plugin.ts", "./config": "./src/config.ts", "./config-schema": "./schema/wt.config.schema.json" },
-  "dependencies": { "@wt/shared": "workspace:*" },
-  "devDependencies": { "@wt/plugins": "workspace:*" }
-}

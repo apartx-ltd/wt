@@ -1,6 +1,6 @@
 import { test, expect, afterAll } from "bun:test";
 import { createServer } from "../src/index";
-import { WT_PROTOCOL_VERSION, type Worktree, type RunInstance, type BaseSpec } from "@wt/shared";
+import { WT_PROTOCOL_VERSION, type Worktree, type RunInstance, type BaseSpec } from "#shared";
 
 // Read paths now call @wt/core directly; inject the providers so tests stay hermetic
 // (no real orchestrator/git). mergeInstances still runs in the server. Action paths

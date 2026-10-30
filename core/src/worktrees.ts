@@ -1,5 +1,5 @@
 import { resolve, basename } from "node:path";
-import type { Worktree } from "@wt/shared";
+import type { Worktree } from "#shared";
 import { listProjects } from "./projects";
 import { readWorktreePort } from "./ports";
 import { projectDir } from "./paths";

@@ -1,4 +1,4 @@
-import type { MergedInstance } from "@wt/shared";
+import type { MergedInstance } from "#shared";
 
 /** Identity ignores volatile fields (uptime derives from `started`, which is stable). */
 function signature(list: MergedInstance[]): string {

@@ -4,76 +4,14 @@
   "workspaces": {
     "": {
       "name": "@wt/root",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5",
-      },
-    },
-    "cli": {
-      "name": "@wt/cli",
-      "version": "0.0.0",
-      "dependencies": {
-        "@wt/core": "workspace:*",
-        "@wt/plugins": "workspace:*",
-        "@wt/shared": "workspace:*",
-      },
-    },
-    "core": {
-      "name": "@wt/core",
-      "version": "0.0.0",
-      "dependencies": {
-        "@wt/shared": "workspace:*",
-      },
-      "devDependencies": {
-        "@wt/plugins": "workspace:*",
-      },
-    },
-    "plugins/meteor": {
-      "name": "@wt/plugin-meteor",
-      "version": "0.0.0",
-      "dependencies": {
-        "@wt/core": "workspace:*",
-      },
-    },
-    "plugins/node": {
-      "name": "@wt/plugin-node",
-      "version": "0.0.0",
-      "dependencies": {
-        "@wt/core": "workspace:*",
-      },
-    },
-    "plugins/registry": {
-      "name": "@wt/plugins",
-      "version": "0.0.0",
-      "dependencies": {
-        "@wt/core": "workspace:*",
-        "@wt/plugin-meteor": "workspace:*",
-        "@wt/plugin-node": "workspace:*",
-      },
-    },
-    "server": {
-      "name": "@wt/server",
-      "version": "0.0.0",
-      "dependencies": {
-        "@wt/core": "workspace:*",
-        "@wt/shared": "workspace:*",
-      },
-    },
-    "shared": {
-      "name": "@wt/shared",
-      "version": "0.0.0",
-    },
-    "tui": {
-      "name": "@wt/tui",
-      "version": "0.0.0",
       "dependencies": {
         "@opentui/core": "0.4.1",
         "@opentui/solid": "0.4.1",
-        "@wt/shared": "workspace:*",
         "solid-js": "1.9.12",
       },
       "devDependencies": {
         "@types/bun": "latest",
+        "typescript": "^5",
       },
     },
     "web": {
@@ -86,7 +24,6 @@
         "@fortawesome/free-solid-svg-icons": "^7.2.0",
         "@internationalized/date": "^3.12.1",
         "@material/material-color-utilities": "^0.4.0",
-        "@wt/shared": "workspace:*",
         "bits-ui": "^2.18.0",
         "chart.js": "^4.5.1",
         "clsx": "^2.1.1",
@@ -394,22 +331,6 @@
     "@types/node": ["@types/node@26.6.6", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog=="],
 
     "@types/resolve": ["@types/resolve@1.20.2", "", {}, "sha512-60BCwRFOZCQhDncwQdxxeOEEkbc5dIMccYLwbxsS4TUNeVECQ/pBJ0j09mrHOl/JJvpRPGwO9SvE4nR2Nb/a4Q=="],
-
-    "@wt/cli": ["@wt/cli@workspace:cli"],
-
-    "@wt/core": ["@wt/core@workspace:core"],
-
-    "@wt/plugin-meteor": ["@wt/plugin-meteor@workspace:plugins/meteor"],
-
-    "@wt/plugin-node": ["@wt/plugin-node@workspace:plugins/node"],
-
-    "@wt/plugins": ["@wt/plugins@workspace:plugins/registry"],
-
-    "@wt/server": ["@wt/server@workspace:server"],
-
-    "@wt/shared": ["@wt/shared@workspace:shared"],
-
-    "@wt/tui": ["@wt/tui@workspace:tui"],
 
     "@wt/web": ["@wt/web@workspace:web"],
 

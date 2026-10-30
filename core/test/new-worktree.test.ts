@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { BASE_SLUG, computeWorktreeEnv, commitWorktreeEnv, regenerateWorktreeEnvPreserving, createWorktree, removeWorktree } from "../src/new-worktree";
 import { readLedger } from "../src/ports";
-import { registerBundledPlugins } from "@wt/plugins";
+import { registerBundledPlugins } from "#plugins";
 
 // computeWorktreeEnv резолвит плагин проекта (envLines) → реестр должен быть заполнен.
 beforeAll(() => registerBundledPlugins());

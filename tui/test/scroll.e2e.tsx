@@ -10,7 +10,7 @@
  */
 import { testRender } from "@opentui/solid";
 import { App } from "../src/app";
-import type { MergedInstance } from "@wt/shared";
+import type { MergedInstance } from "#shared";
 
 const tick = async (t: any, ms = 35) => {
   await new Promise((r) => setTimeout(r, ms));

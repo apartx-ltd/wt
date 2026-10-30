@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { instancesChanged } from "../src/poller";
-import type { MergedInstance } from "@wt/shared";
+import type { MergedInstance } from "#shared";
 
 const inst = (over: Partial<MergedInstance> = {}): MergedInstance => ({
   project: "p", slug: "s", branch: "feature/s", port: 4000,

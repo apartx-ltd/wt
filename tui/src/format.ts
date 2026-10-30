@@ -1,4 +1,4 @@
-import type { RunStatus } from "@wt/shared";
+import type { RunStatus } from "#shared";
 
 export function statusDot(status: RunStatus): { glyph: string; fg: string } {
   switch (status) {

@@ -1,5 +1,5 @@
 import { test, expect, beforeAll } from "bun:test";
-import { registerBundledPlugins } from "@wt/plugins";
+import { registerBundledPlugins } from "#plugins";
 import { createWorktree, computeWorktreeEnv } from "../src/new-worktree";
 import { listProjects } from "../src/projects";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";

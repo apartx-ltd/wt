@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
-import { HttpWtClient, type MergedInstance } from "@wt/shared";
+import { HttpWtClient, type MergedInstance } from "#shared";
 import { useKeyboard, useRenderer } from "@opentui/solid";
 import { InstanceList } from "./InstanceList";
 import { LogPane } from "./LogPane";

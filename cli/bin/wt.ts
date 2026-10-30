@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import {
   BASE_SLUG,
   resolveOrch,
@@ -30,18 +31,25 @@ import {
   slimOne,
   removeVolumes,
   type StopOutcome,
-} from "@wt/core";
-import { registerBundledPlugins } from "@wt/plugins";
+} from "#core";
+import { registerBundledPlugins } from "#plugins";
 import { existsSync } from "node:fs";
 import { col, fmtUptime, stopLine } from "../src/format";
 import { resolveProjectArg } from "../src/args";
+import pkg from "../../package.json";
 
 // Регистрируем бандл-плагины один раз при старте процесса: start/new резолвят плагин
 // проекта через реестр (loadPlugin). Идемпотентно (Map.set).
 registerBundledPlugins();
 
-const orch = resolveOrch();
 const [cmd, ...rest] = process.argv.slice(2);
+// Версия — до топологии workspace: печатается где угодно, без конфига и побочных эффектов.
+if (cmd === "version" || cmd === "--version") {
+  console.log(pkg.version);
+  process.exit(0);
+}
+
+const orch = resolveOrch();
 const json = rest.includes("--json");
 const args = rest.filter((a) => a !== "--json");
 const die = (msg: string): never => {
@@ -402,6 +410,7 @@ const USAGE = `wt — управление много-веточной разр�
   projects [--json]                           список проектов
   ui                                          полноэкранный TUI-дашборд (нужен bun)
   web                                         web-дашборд SvelteKit+apartx-ui (нужен bun)
+  version | --version                         версия wt
 `;
 
 async function cmdHelp() {

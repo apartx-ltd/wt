@@ -1,5 +1,5 @@
-import { mergeInstances, WT_PROTOCOL_VERSION, type MergedInstance, type Worktree, type RunInstance, type BaseSpec } from "@wt/shared";
-import { resolveOrch, listWorktrees, listRunningInstances, listProjects, loadConfig, resolveProjectsDir, projectDir, resolveBasePort, gitBranch } from "@wt/core";
+import { mergeInstances, WT_PROTOCOL_VERSION, type MergedInstance, type Worktree, type RunInstance, type BaseSpec } from "#shared";
+import { resolveOrch, listWorktrees, listRunningInstances, listProjects, loadConfig, resolveProjectsDir, projectDir, resolveBasePort, gitBranch } from "#core";
 import { basename } from "node:path";
 import { runWt, spawnWtDetached, spawnWtLines, streamLines, type WtOpts } from "./wt";
 import { instancesChanged } from "./poller";

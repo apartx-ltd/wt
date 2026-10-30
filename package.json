@@ -1,11 +1,58 @@
 {
-  "name": "@wt/root",
-  "private": true,
+  "name": "@apartx/wt",
+  "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
-  "workspaces": ["shared", "server", "tui", "web", "core", "cli", "plugins/meteor", "plugins/node", "plugins/registry"],
+  "bin": { "wt": "./cli/bin/wt.ts" },
+  "exports": {
+    ".": "./index.ts",
+    "./plugin": "./core/src/plugin.ts",
+    "./plugin-meteor": "./plugins/meteor/src/index.ts",
+    "./plugin-node": "./plugins/node/src/index.ts",
+    "./config-schema": "./core/schema/wt.config.schema.json"
+  },
+  "imports": {
+    "#shared": "./shared/src/index.ts",
+    "#core": "./core/src/index.ts",
+    "#core/plugin": "./core/src/plugin.ts",
+    "#plugins": "./plugins/registry/src/index.ts",
+    "#plugin-meteor": "./plugins/meteor/src/index.ts",
+    "#plugin-node": "./plugins/node/src/index.ts"
+  },
+  "files": [
+    "index.ts",
+    "cli/bin",
+    "cli/src",
+    "core/src",
+    "core/schema",
+    "server/src",
+    "shared/src",
+    "tui/bin",
+    "tui/src",
+    "plugins/meteor/src",
+    "plugins/node/src",
+    "plugins/registry/src",
+    "web/build",
+    "bunfig.toml",
+    "tsconfig.json",
+    "tsconfig.base.json",
+    "README.md",
+    "LICENSE",
+    "History.md"
+  ],
+  "workspaces": ["web"],
+  "engines": { "bun": ">=1.3" },
+  "publishConfig": { "access": "public" },
   "scripts": {
     "test": "bun test",
-    "typecheck": "bunx tsc --noEmit -p tsconfig.json"
+    "typecheck": "bunx tsc --noEmit -p tsconfig.json",
+    "build:web": "cd web && bun run build",
+    "e2e": "bun tui/test/flow.e2e.tsx && bun tui/test/scroll.e2e.tsx"
+  },
+  "dependencies": {
+    "@opentui/core": "0.4.1",
+    "@opentui/solid": "0.4.1",
+    "solid-js": "1.9.12"
   },
   "devDependencies": {
     "@types/bun": "latest",

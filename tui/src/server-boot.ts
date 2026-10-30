@@ -1,4 +1,4 @@
-import { WT_PROTOCOL_VERSION } from "@wt/shared";
+import { WT_PROTOCOL_VERSION } from "#shared";
 
 /** GET /api/health → its `version`, or null if absent/unreachable/malformed. */
 export async function fetchServerVersion(baseUrl: string): Promise<number | null> {

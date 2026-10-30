@@ -1,4 +1,4 @@
-import { PLUGIN_API_VERSION, mongoDirectConnectionFilter, type StackPlugin } from "@wt/core/plugin";
+import { PLUGIN_API_VERSION, mongoDirectConnectionFilter, type StackPlugin } from "#core/plugin";
 
 /**
  * Generic Node plugin (дефолт для bare-репо): `npm install` / `npm run dev -- --port <port>`.

@@ -1,6 +1,6 @@
 // core/test/parity.test.ts
 import { test, expect, beforeAll } from "bun:test";
-import { registerBundledPlugins } from "@wt/plugins";
+import { registerBundledPlugins } from "#plugins";
 import { loadPlugin } from "../src/plugin";
 import { generateEnvWorktree } from "../src/env-worktree";
 

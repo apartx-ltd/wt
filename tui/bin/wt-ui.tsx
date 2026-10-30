@@ -1,5 +1,5 @@
 import { render } from "@opentui/solid";
-import { HttpWtClient } from "@wt/shared";
+import { HttpWtClient } from "#shared";
 import { App } from "../src/app";
 import { ensureServer } from "../src/server-boot";
 

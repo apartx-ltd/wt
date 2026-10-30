@@ -19,9 +19,9 @@ const apartxUiAliases = [
   { find: "apartx-ui/theme", replacement: ui("theme") },
   { find: "apartx-ui/styles", replacement: ui("styles") },
   { find: /^apartx-ui$/, replacement: ui("index.ts") },
-  // shared HTTP contract — resolve the source directly (bun workspace symlink
-  // also works, but the alias keeps Vite SSR/optimizeDeps happy).
-  { find: /^@wt\/shared$/, replacement: path.resolve("../shared/src/index.ts") },
+  // shared HTTP contract — the root package's `#shared` subpath import; resolve the
+  // source directly (the alias keeps Vite SSR/optimizeDeps happy).
+  { find: /^#shared$/, replacement: path.resolve("../shared/src/index.ts") },
 ];
 
 // The browser talks to the wt-server via same-origin `/api` (HttpWtClient with an

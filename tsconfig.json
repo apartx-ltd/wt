@@ -3,8 +3,7 @@
   "compilerOptions": {
     "lib": ["ESNext", "DOM"],
     "jsxImportSource": "@opentui/solid",
-    "allowImportingTsExtensions": true,
-    "paths": { "@wt/shared": ["./shared/src/index.ts"], "@wt/core": ["./core/src/index.ts"] }
+    "allowImportingTsExtensions": true
   },
   "include": [
     "shared/src", "shared/test",

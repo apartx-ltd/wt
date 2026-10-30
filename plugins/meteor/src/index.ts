@@ -1,4 +1,4 @@
-import { PLUGIN_API_VERSION, mongoDirectConnectionFilter, type StackPlugin } from "@wt/core/plugin";
+import { PLUGIN_API_VERSION, mongoDirectConnectionFilter, type StackPlugin } from "#core/plugin";
 
 /** Meteor stack plugin. Поведение — паритет с inline-логикой core до M1 (см. parity.test.ts). */
 export const meteorPlugin: StackPlugin = {

@@ -1,4 +1,4 @@
-import type { StopOutcome } from "@wt/core";
+import type { StopOutcome } from "#core";
 
 /**
  * Строка отчёта `wt stop` по ФАКТУ остановки, а не по запланированному действию:

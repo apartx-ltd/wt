@@ -1,14 +1,14 @@
 /**
  * End-to-end interaction check for the dashboard actions and modals.
  *
- * Run with `bun` (NOT `bun test`): `cd tools/wt/tui && bun test/flow.e2e.tsx`.
+ * Run with `bun` (NOT `bun test`): `bun run e2e` from the repo root (the root bunfig.toml preloads @opentui/solid).
  * `bun test` resolves solid-js to its "node"/SSR build (orphan-text crash in the
  * universal renderer); `bun <script>` resolves the client build the real `wt ui`
  * uses. So this lives outside the bun-test glob (`.e2e.tsx`) and self-asserts.
  */
 import { testRender } from "@opentui/solid";
 import { App } from "../src/app";
-import type { MergedInstance } from "@wt/shared";
+import type { MergedInstance } from "#shared";
 
 const tick = async (t: any, ms = 35) => {
   await new Promise((r) => setTimeout(r, ms));

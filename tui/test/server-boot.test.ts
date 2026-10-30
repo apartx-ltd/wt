@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { WT_PROTOCOL_VERSION } from "@wt/shared";
+import { WT_PROTOCOL_VERSION } from "#shared";
 import { ensureServer, type BootDeps } from "../src/server-boot";
 
 const OPTS = { port: 4599, serverEntry: "/dev/null" };
