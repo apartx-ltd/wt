@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { mkdir, appendFile, writeFile } from "node:fs/promises";
 import type { ExtraPortSpec } from "./plugin";
 
-/** Port offset step between worktrees (worktree-env.sh STEP=10). */
+/** Default port offset step between worktrees (`ports.step` in wt.config.ts; worktree-env.sh STEP=10). */
 export const STEP = 10;
 
 /**
@@ -76,7 +76,8 @@ export async function resolveBasePort(projectDir: string): Promise<number | null
 /**
  * Deterministic base aux port of a project: `spec.basePort` + the project's stable index
  * within the dockerized set. Unique within the set; limited to 10 buckets (worktree offsets
- * are multiples of STEP=10 → a difference <10 rules out base↔worktree collisions). The stack's name/number (hmr/8085)
+ * are multiples of the step, 10 by default → a difference <10 rules out base↔worktree
+ * collisions; a `ports.step` below 10 gives that guarantee up). The stack's name/number (hmr/8085)
  * comes in `spec` from the plugin and is not hardcoded here.
  */
 export function deterministicAuxBasePort(project: string, basePort: number, dockerized: string[]): number {
@@ -129,8 +130,10 @@ export function parseLedger(text: string): LedgerRow[] {
 }
 
 /**
- * Offset for (project, branch): the existing one if any; otherwise the smallest `n*STEP`
+ * Offset for (project, branch): the existing one if any; otherwise the smallest `n*step`
  * (n≥1) not present among ALL offsets in the ledger. Parity with worktree-env.sh.
+ * `step` is `ports.step` of the config (default STEP=10); the ledger stores absolute offsets,
+ * so known branches keep theirs when the step changes.
  *
  * `basePort` enables the BLOCKED_PORTS check: a port taken by the system is handed neither to
  * a new branch nor to a known one — a branch with a "blind" port moves to the next free one
@@ -142,14 +145,15 @@ export function allocateOffset(
   project: string,
   branch: string,
   basePort?: number,
+  step = STEP,
 ): number {
   const blocked = (offset: number) => basePort !== undefined && isBlockedPort(basePort + offset);
   const existing = ledger.find((r) => r.project === project && r.branch === branch);
   if (existing && !blocked(existing.offset)) return existing.offset;
   const taken = new Set(ledger.map((r) => r.offset));
   let n = 1;
-  while (taken.has(n * STEP) || blocked(n * STEP)) n++;
-  return n * STEP;
+  while (taken.has(n * step) || blocked(n * step)) n++;
+  return n * step;
 }
 
 /** PORT from the worktree directory's `.env.worktree`; null if the file/key is missing. */

@@ -183,3 +183,14 @@ test("deterministicAuxBasePort is unique across all DOCKERIZED projects", () => 
   const bases = DOCKERIZED.map((p) => deterministicAuxBasePort(p, 8085, DOCKERIZED));
   expect(new Set(bases).size).toBe(DOCKERIZED.length);
 });
+
+test("allocateOffset uses the given step (multiples of step, gaps filled)", () => {
+  expect(allocateOffset([], "a", "b", undefined, 20)).toBe(20);
+  const led: LedgerRow[] = [
+    { project: "a", branch: "x", offset: 20 },
+    { project: "b", branch: "y", offset: 60 },
+  ];
+  expect(allocateOffset(led, "c", "z", undefined, 20)).toBe(40);
+  // a known branch keeps its recorded offset whatever the step
+  expect(allocateOffset([{ project: "a", branch: "old", offset: 10 }], "a", "old", undefined, 20)).toBe(10);
+});

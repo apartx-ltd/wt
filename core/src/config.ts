@@ -136,6 +136,9 @@ export function validateConfig(config: WorkspaceConfig, repoName = "app"): Resol
     throw new Error("wt.config: `projectsDir` is incompatible with single-repo `project`");
   }
   const resolved = resolveConfig(config, repoName);
+  if (!Number.isInteger(resolved.ports.step) || resolved.ports.step < 1) {
+    throw new Error(`wt.config: ports.step must be a positive integer (got ${config.ports?.step})`);
+  }
   for (const [name, pc] of Object.entries(resolved.projects)) {
     if (!pc.plugin) throw new Error(`wt.config: project ${name}: no plugin set (neither in the project nor in defaults)`);
   }
@@ -180,6 +183,12 @@ export async function resolveProjectsDir(orch: string): Promise<string> {
   if (!existsSync(resolve(orch, "wt.config.ts"))) return "projects";
   const cfg = await loadConfig(orch, basename(orch));
   return cfg.projectsDir;
+}
+
+/** Port offset step between worktrees (`ports.step`); 10 when there is no config or no field. */
+export async function resolvePortStep(orch: string): Promise<number> {
+  if (!existsSync(resolve(orch, "wt.config.ts"))) return 10;
+  return (await loadConfig(orch, basename(orch))).ports.step;
 }
 
 /** Name of the upstream project for `--server` from `<orch>/wt.config.ts`; null if there is no config/field. */

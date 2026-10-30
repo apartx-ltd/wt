@@ -5,7 +5,7 @@ import { resolveBasePort, resolveAuxBasePort, readLedger, allocateOffset, append
 import { generateEnvWorktree, branchDbSuffix } from "./env-worktree";
 import { containerName } from "./containers";
 import { loadPlugin, type EnvCtx, type InstanceCtx } from "./plugin";
-import { loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir } from "./config";
+import { loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, resolvePortStep } from "./config";
 import { stopInstance } from "./run";
 import { installDockerDeps, installHostDeps } from "./deps";
 import {
@@ -79,7 +79,7 @@ export async function computeWorktreeEnv(
   const ledger = await readLedger(orch);
   const existingRow = ledger.find((r) => r.project === project && r.branch === branch);
   const isNew = !existingRow;
-  const offset = allocateOffset(ledger, project, branch, basePort);
+  const offset = allocateOffset(ledger, project, branch, basePort, await resolvePortStep(orch));
   // The branch was already in the ledger, but its port is taken by the system (BLOCKED_PORTS) — move it.
   const reallocated = !!existingRow && existingRow.offset !== offset;
 

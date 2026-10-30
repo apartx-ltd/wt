@@ -93,6 +93,14 @@ test("validateConfig rejects a project with no plugin after defaults", () => {
     .toThrow(/project a: no plugin set/);
 });
 
+test("validateConfig rejects a ports.step that is not a positive integer", () => {
+  for (const step of [0, -10, 2.5]) {
+    expect(() => validateConfig({ ports: { step }, projects: { a: { plugin: "p" } } }))
+      .toThrow(/ports\.step must be a positive integer/);
+  }
+  expect(validateConfig({ ports: { step: 20 }, projects: { a: { plugin: "p" } } }).ports.step).toBe(20);
+});
+
 test("validateConfig passes a project that inherits plugin from defaults", () => {
   expect(() => validateConfig({ defaults: { plugin: "p" }, projects: { a: {} } })).not.toThrow();
 });

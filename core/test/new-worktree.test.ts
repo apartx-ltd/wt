@@ -407,3 +407,27 @@ export default defineWorkspace({
     rmSync(orch, { recursive: true, force: true });
   }
 });
+
+test("ports.step from wt.config.ts drives allocation (20, 40, …)", async () => {
+  const orch = mkdtempSync(resolve(tmpdir(), "wt-step-"));
+  try {
+    mkdirSync(resolve(orch, "projects", "api"), { recursive: true });
+    writeFileSync(resolve(orch, "projects", "api", ".env"), "PORT=3000\n");
+    writeFileSync(
+      resolve(orch, "wt.config.ts"),
+      `import { defineWorkspace } from ${JSON.stringify(CONFIG_SRC)};
+export default defineWorkspace({
+  ports: { step: 20 },
+  defaults: { plugin: "@apartx/wt/plugin-node" },
+  projects: { api: {} },
+});
+`,
+    );
+    const a = await commitWorktreeEnv(orch, "api", "feature/a", resolve(orch, "worktrees", "api", "a"));
+    const b = await commitWorktreeEnv(orch, "api", "feature/b", resolve(orch, "worktrees", "api", "b"));
+    expect([a.offset, a.port]).toEqual([20, 3020]);
+    expect([b.offset, b.port]).toEqual([40, 3040]);
+  } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
+});

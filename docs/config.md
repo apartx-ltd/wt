@@ -72,7 +72,7 @@ Exactly one of `project` / `projects` must be set, and `projectsDir` cannot be c
 | `project` | `ProjectConfig` | — | Single-repo: the one project (the workspace root). |
 | `projects` | `Record<string, ProjectConfig>` | — | Multi-repo: projects keyed by their directory name under `projectsDir`. |
 | `branches` | `{ base: string; prefix: string }` | `{ base: "main", prefix: "feature/" }` | `wt new <p> <slug>` creates branch `<prefix><slug>` from `base` in the project repository (or checks out `<prefix><slug>` if it already exists locally). |
-| `ports` | `{ step?: number }` | `{ step: 10 }` | Accepted and validated, but the allocator currently always uses a step of 10. |
+| `ports` | `{ step?: number }` | `{ step: 10 }` | `step`: the distance between worktree port offsets, see [Ports](#ports). Must be a positive integer; no other range checks are made. |
 | `defaults` | `ProjectConfig` | `{}` | Deep-merged into every entry of `projects` / `project`: nested objects merge, scalars and arrays are replaced by the project's value. |
 | `links` | `string[]` | `[]` | Inter-service links, see [Links](#links). |
 
@@ -117,11 +117,18 @@ A project's **base port** is the first `PORT=` in `projects/<p>/.env`, otherwise
 `PORT=NN`, `--port NN`, `--port=NN` or `-p NN` in its `package.json`. A project with neither
 cannot get a worktree (`wt new` fails with `no PORT found …`).
 
-A **worktree's port** is the base port plus an offset. The offset is the smallest multiple of 10
-not used by any branch of any project in `var/worktree-ports.tsv`, so the same slug gets
-different offsets in different projects, and a branch keeps its offset for good — including
-after `wt rm`. Ports 5000 and 7000 are never handed out (taken by macOS system services). `wt
-port <p> <slug>` prints the port of an existing worktree; `wt port <p>` prints the base port.
+A **worktree's port** is the base port plus an offset. The offset is the smallest multiple of
+`ports.step` (default 10) not used by any branch of any project in `var/worktree-ports.tsv`, so
+the same slug gets different offsets in different projects, and a branch keeps its offset for
+good — including after `wt rm`. The ledger records absolute offsets, so changing `ports.step`
+affects only branches allocated afterwards. Ports 5000 and 7000 are never handed out (taken by
+macOS system services). `wt port <p> <slug>` prints the port of an existing worktree; `wt port
+<p>` prints the base port.
+
+Keep the step at 10 or more if a plugin allocates extra ports (such as the Meteor plugin's HMR
+port, see `extraPorts` in [plugins.md](plugins.md)): the base checkouts of the dockerized
+projects take up to 10 consecutive extra ports, and a worktree's extra ports are shifted by the
+same offset as its `PORT`, so a smaller step can make them collide.
 
 ## Links
 
