@@ -59,9 +59,10 @@ export async function killPort(port: number): Promise<void> {
   }
 }
 
-function spawnServer(port: number, serverEntry: string): import("bun").Subprocess {
+function spawnServer(port: number, serverEntry: string, staticDir?: string): import("bun").Subprocess {
   return Bun.spawn(["bun", serverEntry], {
-    env: { ...process.env, PORT: String(port) },
+    // WT_STATIC_DIR → the server also serves the built web dashboard (see ServerOpts.staticDir).
+    env: { ...process.env, PORT: String(port), ...(staticDir ? { WT_STATIC_DIR: staticDir } : {}) },
     stdin: "ignore",
     stdout: "ignore",
     stderr: "ignore",
@@ -72,7 +73,7 @@ export interface BootDeps {
   fetchVersion?: (baseUrl: string) => Promise<number | null>;
   isWtServer?: (baseUrl: string) => Promise<boolean>;
   killPort?: (port: number) => Promise<void>;
-  spawnServer?: (port: number, serverEntry: string) => import("bun").Subprocess | undefined;
+  spawnServer?: (port: number, serverEntry: string, staticDir?: string) => import("bun").Subprocess | undefined;
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -91,7 +92,7 @@ export interface BootResult {
  * which is precisely how the log pane broke after P2 added the logs route.
  */
 export async function ensureServer(
-  opts: { port: number; serverEntry: string },
+  opts: { port: number; serverEntry: string; staticDir?: string },
   deps: BootDeps = {},
 ): Promise<BootResult> {
   const fv = deps.fetchVersion ?? fetchServerVersion;
@@ -112,7 +113,7 @@ export async function ensureServer(
     replaced = true;
   }
 
-  const spawned = spawn(opts.port, opts.serverEntry);
+  const spawned = spawn(opts.port, opts.serverEntry, opts.staticDir);
   for (let i = 0; i < 50; i++) {
     if ((await fv(baseUrl)) === WT_PROTOCOL_VERSION) return { baseUrl, spawned, replaced };
     await sleep(100);

@@ -54,3 +54,17 @@ test("spawns fresh when nothing is listening (no kill)", async () => {
   expect(killed).toBe(false);
   expect(res.replaced).toBe(false);
 });
+
+test("passes staticDir through to the spawned server", async () => {
+  let fresh = false;
+  let spawnedWith: string | undefined;
+  const deps: BootDeps = {
+    fetchVersion: async () => (fresh ? WT_PROTOCOL_VERSION : null),
+    isWtServer: async () => false,
+    killPort: async () => {},
+    spawnServer: (_port, _entry, staticDir) => { spawnedWith = staticDir; fresh = true; return undefined; },
+    sleep: noSleep,
+  };
+  await ensureServer({ ...OPTS, staticDir: "/srv/wt/web/build" }, deps);
+  expect(spawnedWith).toBe("/srv/wt/web/build");
+});

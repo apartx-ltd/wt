@@ -1,6 +1,7 @@
 import { mergeInstances, WT_PROTOCOL_VERSION, type MergedInstance, type Worktree, type RunInstance, type BaseSpec } from "#shared";
 import { resolveOrch, listWorktrees, listRunningInstances, listProjects, loadConfig, resolveProjectsDir, projectDir, resolveBasePort, gitBranch } from "#core";
-import { basename } from "node:path";
+import { stat } from "node:fs/promises";
+import { basename, resolve, sep } from "node:path";
 import { runWt, spawnWtDetached, spawnWtLines, streamLines, type WtOpts } from "./wt";
 import { instancesChanged } from "./poller";
 
@@ -16,6 +17,11 @@ export interface ServerOpts extends WtOpts {
   readProjects?: () => Promise<string[]>;
   /** Workspace title for /api/meta; default loads `wt.config` title (null if unset/no config). */
   readTitle?: () => Promise<string | null>;
+  /**
+   * Built web dashboard (`web/build`) served for every non-`/api` path, with an
+   * `index.html` fallback for SPA routes. Default: `WT_STATIC_DIR` env; unset → 404.
+   */
+  staticDir?: string;
 }
 
 /** Resolve the read providers, defaulting to direct core reads against `orch`. */
@@ -53,12 +59,43 @@ function sse(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Serve `pathname` from `staticDir`: the file if it exists, else `index.html` (the
+ * SPA shell routes client-side). Paths that decode to somewhere outside `staticDir`
+ * (e.g. `/..%2fsecret`) are rejected with 404 rather than falling back.
+ */
+async function serveStatic(staticDir: string, pathname: string): Promise<Response> {
+  const notFound = () => new Response("not found", { status: 404 });
+  const root = resolve(staticDir);
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return notFound();
+  }
+  const target = resolve(root, `.${decoded}`);
+  if (target !== root && !target.startsWith(root + sep)) return notFound();
+  if (await isFile(target)) return new Response(Bun.file(target));
+  const index = resolve(root, "index.html");
+  if (await isFile(index)) return new Response(Bun.file(index));
+  return notFound();
+}
+
 export function createServer(serverOpts: ServerOpts = {}) {
   // Resolve the workspace once; `opts` (with orch) is what every runWt/spawnWt* call
   // below receives, so the spawned CLI gets the same root as WT_ORCH.
   const orch = serverOpts.orch ?? resolveOrch();
   const opts: ServerOpts = { ...serverOpts, orch };
   const pollMs = opts.pollMs ?? 1500;
+  const staticDir = opts.staticDir ?? process.env.WT_STATIC_DIR;
   const { snapshot, readProjects, readTitle } = readers(opts, orch);
 
   return Bun.serve({
@@ -206,6 +243,12 @@ export function createServer(serverOpts: ServerOpts = {}) {
             Connection: "keep-alive",
           },
         });
+      }
+
+      // Everything outside /api is the static dashboard (when one is configured).
+      const isApi = url.pathname === "/api" || url.pathname.startsWith("/api/");
+      if (staticDir && !isApi && (req.method === "GET" || req.method === "HEAD")) {
+        return serveStatic(staticDir, url.pathname);
       }
 
       return new Response("not found", { status: 404 });

@@ -1,5 +1,5 @@
-import { test, expect, afterAll } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { test, expect, afterAll, describe } from "bun:test";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "../src/index";
@@ -208,4 +208,69 @@ test("POST .../link and .../unlink return exit codes", async () => {
     method: "POST",
   });
   expect(await unlink.json()).toEqual({ code: 0 });
+});
+
+describe("static dashboard (staticDir)", () => {
+  const STATIC = mkdtempSync(resolve(tmpdir(), "wt-server-static-"));
+  const INDEX = "<!doctype html><title>wt</title>";
+  mkdirSync(resolve(STATIC, "assets"));
+  writeFileSync(resolve(STATIC, "index.html"), INDEX);
+  writeFileSync(resolve(STATIC, "assets/a.js"), "console.log(1);");
+  // A file next to (outside) staticDir that a traversal must not reach.
+  const SECRET = `${STATIC}-secret.txt`;
+  writeFileSync(SECRET, "secret");
+  const s = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...READERS, staticDir: STATIC });
+  const base = `http://localhost:${s.port}`;
+
+  afterAll(() => {
+    s.stop(true);
+    rmSync(STATIC, { recursive: true, force: true });
+    rmSync(SECRET, { force: true });
+  });
+
+  test("GET / serves index.html as text/html", async () => {
+    const res = await fetch(`${base}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(await res.text()).toBe(INDEX);
+  });
+
+  test("GET /assets/a.js serves the file with a JavaScript content type", async () => {
+    const res = await fetch(`${base}/assets/a.js`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/^(application|text)\/javascript/);
+    expect(await res.text()).toBe("console.log(1);");
+  });
+
+  test("unknown non-/api paths fall back to index.html (SPA routing)", async () => {
+    const res = await fetch(`${base}/anything/deep`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(await res.text()).toBe(INDEX);
+  });
+
+  test("/api routes still answer JSON", async () => {
+    const res = await fetch(`${base}/api/health`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ version: WT_PROTOCOL_VERSION });
+  });
+
+  test("unknown /api paths stay 404 (no index.html fallback)", async () => {
+    const res = await fetch(`${base}/api/nope`);
+    expect(res.status).toBe(404);
+  });
+
+  test("path traversal cannot escape staticDir", async () => {
+    // The URL parser collapses `..` and `%2e%2e/` segments, but keeps `..%2f`; a naive
+    // decodeURIComponent of the pathname would turn that into `../<secret>`.
+    const name = SECRET.slice(SECRET.lastIndexOf("/") + 1);
+    const res = await fetch(`${base}/..%2f${name}`);
+    expect(res.status).toBe(404);
+    expect(await res.text()).not.toBe("secret");
+  });
+});
+
+test("without staticDir non-/api paths are 404", async () => {
+  const res = await fetch(`http://localhost:${server.port}/`);
+  expect(res.status).toBe(404);
 });
