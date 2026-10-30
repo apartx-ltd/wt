@@ -1,14 +1,38 @@
-import { test, expect } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import { resolve } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { writeFileSync } from "node:fs";
 import { defineWorkspace, resolveConfig, validateConfig, loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveCoreStack, resolveLinkSpecs, resolveProjectsDir, resolveServerProject } from "../src/config";
 
-// orch root = 4 levels up from tools/wt/core/test → the repo root (works in the worktree AND after merge).
-function resolveOrchRoot(): string {
-  return resolve(import.meta.dir, "../../../..");
-}
+// A multi-repo workspace written by the test: a dockerized core project (srv), a host-mode
+// core project inheriting the plugin from defaults (web) and a node-plugin project (worker).
+// Declared out of name order so the sorted core-stack contract is actually exercised.
+const FIXTURE_LINKS = ["web:srv:env:SERVER_URL", "worker:srv:env:SERVER_URL"];
+let workspace: string;
+
+beforeAll(() => {
+  workspace = mkdtempSync(resolve(tmpdir(), "wt-config-ws-"));
+  writeFileSync(
+    resolve(workspace, "wt.config.ts"),
+    `import { defineWorkspace } from "${resolve(import.meta.dir, "../src/config")}";\n` +
+      `export default defineWorkspace({\n` +
+      `  projectsDir: "projects",\n` +
+      `  serverProject: "srv",\n` +
+      `  defaults: { plugin: "@apartx/wt/plugin-meteor" },\n` +
+      `  projects: {\n` +
+      `    web: { core: { slug: "base" } },\n` +
+      `    worker: { plugin: "@apartx/wt/plugin-node" },\n` +
+      `    srv: { docker: { image: "meteor-dev:3.4" }, core: { slug: "base" } },\n` +
+      `  },\n` +
+      `  links: ${JSON.stringify(FIXTURE_LINKS)},\n` +
+      `});\n`,
+  );
+});
+
+afterAll(() => {
+  rmSync(workspace, { recursive: true, force: true });
+});
 
 test("defineWorkspace returns its argument unchanged (identity helper for types)", () => {
   const cfg = defineWorkspace({
@@ -73,38 +97,33 @@ test("validateConfig passes a project that inherits plugin from defaults", () =>
   expect(() => validateConfig({ defaults: { plugin: "p" }, projects: { a: {} } })).not.toThrow();
 });
 
-test("apartx wt.config.ts loads and validates", async () => {
-  const cfg = await loadConfig(resolveOrchRoot());
-  expect(cfg.projects["apartx-server"].plugin).toBe("@apartx/wt/plugin-meteor");
-  expect(cfg.projects["apartx-server"].docker?.image).toBe("meteor-dev:3.4");
-  expect(cfg.projects["apartx-spaces"].plugin).toBe("@apartx/wt/plugin-meteor"); // from defaults
+test("a workspace wt.config.ts loads and validates", async () => {
+  const cfg = await loadConfig(workspace);
+  expect(cfg.projects.srv.plugin).toBe("@apartx/wt/plugin-meteor"); // from defaults
+  expect(cfg.projects.srv.docker?.image).toBe("meteor-dev:3.4");
+  expect(cfg.projects.web.plugin).toBe("@apartx/wt/plugin-meteor"); // from defaults
+  expect(cfg.projects.web.docker).toBeUndefined();
+  expect(cfg.projects.worker.plugin).toBe("@apartx/wt/plugin-node"); // own plugin wins
 });
 
 test("resolveProjectConfig: listed project from config, unlisted falls back to constants parity", async () => {
-  const orch = resolveOrchRoot();
-  // listed dockerized core project → from config (mirrors constants exactly)
-  const server = await resolveProjectConfig(orch, "apartx-server");
+  // listed dockerized core project → from config
+  const server = await resolveProjectConfig(workspace, "srv");
   expect(server.plugin).toBe("@apartx/wt/plugin-meteor");
   expect(server.docker?.image).toBe("meteor-dev:3.4");
-  // unlisted host project → fallback (constants); host-meteor, no docker.
-  // Имя нельзя брать «на глазок»: раньше здесь стоял apartx-whatsapp, его перевели в
-  // docker — и тест покраснел от правки конфига, а не движка. Нужен проект, который
-  // в wt.config.ts не объявлен (apartx-geoip — host-режим).
-  const unlisted = await resolveProjectConfig(orch, "apartx-geoip");
+  // unlisted project → fallback (constants); host-meteor, no docker.
+  const unlisted = await resolveProjectConfig(workspace, "geoip");
   expect(unlisted.plugin).toBe("@apartx/wt/plugin-meteor");
   expect(unlisted.docker).toBeUndefined();
 });
 
-test("resolveDockerizedProjects returns the docker-image projects, sorted, contract-checked", async () => {
-  // Contract over the engine, NOT a 1:1 mirror of wt.config.ts data: editing the
-  // dockerized set in the orchestrator config must not break @wt/core tests.
-  const names = [...(await resolveDockerizedProjects(resolveOrchRoot()))];
-  // the always-dockerized core stack is present
-  expect(names).toContain("apartx-server");
-  expect(names).toContain("apartx-cabinet");
-  expect(names).toContain("apartx-admin");
-  // an unlisted host-mode project is never reported as dockerized
-  expect(names).not.toContain("apartx-geoip");
+test("resolveDockerizedProjects returns only the docker-image projects", async () => {
+  const names = [...(await resolveDockerizedProjects(workspace))];
+  expect(names).toEqual(["srv"]);
+  // host-mode, node-plugin and unlisted projects are never reported as dockerized
+  expect(names).not.toContain("web");
+  expect(names).not.toContain("worker");
+  expect(names).not.toContain("geoip");
 });
 
 test("resolveDockerizedProjects returns [] when no wt.config.ts exists", async () => {
@@ -117,15 +136,8 @@ test("resolveDockerizedProjects returns [] when no wt.config.ts exists", async (
 });
 
 test("resolveCoreStack returns [project, slug] pairs for projects with a core spec, sorted by name", async () => {
-  // Contract, not a data mirror: every entry is a [name, slug] pair, the list is
-  // sorted by name, and the core services are present with their base slug.
-  const stack = await resolveCoreStack(resolveOrchRoot());
-  expect(stack.length).toBeGreaterThan(0);
-  for (const entry of stack) expect(entry).toHaveLength(2);
-  const names = stack.map(([name]) => name);
-  expect(names).toEqual([...names].sort());
-  expect(stack).toContainEqual(["apartx-server", "base"]);
-  expect(stack).toContainEqual(["apartx-cabinet", "base"]);
+  // web is declared before srv, so the order proves the sort; worker has no core spec.
+  expect(await resolveCoreStack(workspace)).toEqual([["srv", "base"], ["web", "base"]]);
 });
 
 test("resolveCoreStack returns [] when there is no wt.config.ts", async () => {
@@ -138,8 +150,7 @@ test("resolveCoreStack returns [] when there is no wt.config.ts", async () => {
 });
 
 test("resolveLinkSpecs returns the config links verbatim", async () => {
-  const links = await resolveLinkSpecs(resolveOrchRoot());
-  expect(links).toContain("apartx-cabinet:apartx-server:env:SERVER_URL");
+  expect(await resolveLinkSpecs(workspace)).toEqual(FIXTURE_LINKS);
 });
 
 test("resolveLinkSpecs returns [] when there is no wt.config.ts", async () => {
@@ -164,8 +175,8 @@ test("resolveProjectsDir returns '.' for single-repo config, 'projects' for mult
   } finally {
     rmSync(orch, { recursive: true, force: true });
   }
-  // apartx (multi-repo) → "projects"
-  expect(await resolveProjectsDir(resolveOrchRoot())).toBe("projects");
+  // multi-repo workspace → "projects"
+  expect(await resolveProjectsDir(workspace)).toBe("projects");
 });
 
 test("resolveProjectsDir returns 'projects' when there is no wt.config.ts", async () => {

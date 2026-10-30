@@ -1,14 +1,17 @@
+import { resolve } from "node:path";
+import { packageRoot } from "#core";
+
 export interface WtOpts {
-  /** Path to the wt binary. Defaults to repo `scripts/wt`. */
+  /** Override for the wt executable (tests use a stub). Defaults to the package's own CLI. */
   wtBin?: string;
   /** Working directory (orchestrator root). */
   cwd?: string;
 }
 
-function resolveBin(opts: WtOpts): string {
-  if (opts.wtBin) return opts.wtBin;
-  // tools/wt/server/src/wt.ts → repo root is four levels up.
-  return new URL("../../../../scripts/wt", import.meta.url).pathname;
+/** Spawn-array prefix for the wt CLI: the package's own `cli/bin/wt.ts` run by the current bun. */
+export function resolveBin(opts: WtOpts): string[] {
+  if (opts.wtBin) return [opts.wtBin];
+  return [process.execPath, resolve(packageRoot(), "cli/bin/wt.ts")];
 }
 
 /**
@@ -30,8 +33,8 @@ export function childEnv(
 /**
  * Run the wt CLI to completion and capture its output. Does NOT throw on a non-zero
  * exit — the caller inspects `code` (used for the fast `wt stop`, where the exit code
- * is the result we report to the client). `scripts/wt` is the TS-CLI shim
- * (`@wt/cli` → `@wt/core`), so this is a subprocess boundary, not a bash call.
+ * is the result we report to the client). The CLI is the package's own `cli/bin/wt.ts`
+ * (→ `#core`), so this is a subprocess boundary, not a bash call.
  * Read-only snapshots (list/ps/projects) skip the subprocess entirely — the server
  * reads them in-process via `@wt/core` (see index.ts); only mutations spawn the CLI here.
  */
@@ -39,7 +42,7 @@ export async function runWt(
   args: string[],
   opts: WtOpts = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const proc = Bun.spawn([resolveBin(opts), ...args], {
+  const proc = Bun.spawn([...resolveBin(opts), ...args], {
     cwd: opts.cwd,
     env: childEnv(),
     stdout: "pipe",
@@ -56,11 +59,11 @@ export async function runWt(
 /**
  * Spawn the wt CLI detached and return immediately. `start`/`restart` block until the
  * dev server's port is up (a Meteor build can take minutes); the daemon must not block
- * its event loop on that, so it forks the CLI (scripts/wt → @wt/cli → @wt/core) as a
+ * its event loop on that, so it forks the CLI (cli/bin/wt.ts → #core) as a
  * fire-and-forget child that owns the long-running lifecycle.
  */
 export function spawnWtDetached(args: string[], opts: WtOpts = {}): void {
-  Bun.spawn([resolveBin(opts), ...args], {
+  Bun.spawn([...resolveBin(opts), ...args], {
     cwd: opts.cwd,
     env: childEnv(),
     stdin: "ignore",
@@ -71,7 +74,7 @@ export function spawnWtDetached(args: string[], opts: WtOpts = {}): void {
 
 /** Spawn wt with stdout piped, for streaming (e.g. `wt logs -f`). Caller kills it. */
 export function spawnWtLines(args: string[], opts: WtOpts = {}): Bun.Subprocess {
-  return Bun.spawn([resolveBin(opts), ...args], {
+  return Bun.spawn([...resolveBin(opts), ...args], {
     cwd: opts.cwd,
     env: childEnv(),
     stdin: "ignore",

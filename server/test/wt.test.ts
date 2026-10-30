@@ -1,7 +1,26 @@
 import { test, expect } from "bun:test";
-import { runWt, spawnWtLines, streamLines, childEnv } from "../src/wt";
+import { existsSync } from "node:fs";
+import { runWt, spawnWtLines, streamLines, childEnv, resolveBin } from "../src/wt";
 
 const STUB = new URL("./fixtures/wt-stub.sh", import.meta.url).pathname;
+
+test("resolveBin defaults to the package's own CLI run by the current bun", () => {
+  const bin = resolveBin({});
+  expect(bin).toHaveLength(2);
+  expect(bin[0]).toBe(process.execPath);
+  expect(bin[1]!.endsWith("/cli/bin/wt.ts")).toBe(true);
+  expect(existsSync(bin[1]!)).toBe(true);
+});
+
+test("resolveBin honours the wtBin override as a single-element spawn prefix", () => {
+  expect(resolveBin({ wtBin: STUB })).toEqual([STUB]);
+});
+
+test("the default CLI spawns and answers --version", async () => {
+  const r = await runWt(["--version"]);
+  expect(r.code).toBe(0);
+  expect(r.stdout.trim()).toBe(require("../../package.json").version);
+});
 
 test("childEnv drops PORT so the daemon's port can't leak into a spawned wt", () => {
   const env = childEnv({ PORT: "4499", PATH: "/usr/bin", HOME: "/home/x" });

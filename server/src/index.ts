@@ -7,7 +7,7 @@ import { instancesChanged } from "./poller";
 export interface ServerOpts extends WtOpts {
   port?: number;
   pollMs?: number;
-  /** Orchestrator root for core reads. Default: resolveOrch() (WT_ORCH env / package layout). */
+  /** Orchestrator root for core reads. Default: resolveOrch() (WT_ORCH env / wt.config.ts upward from cwd). */
   orch?: string;
   /** Test seams — override the read providers; default to direct `@wt/core` calls. */
   readWorktrees?: () => Promise<Worktree[]>;

@@ -49,7 +49,6 @@ if (cmd === "version" || cmd === "--version") {
   process.exit(0);
 }
 
-const orch = resolveOrch();
 const json = rest.includes("--json");
 const args = rest.filter((a) => a !== "--json");
 const die = (msg: string): never => {
@@ -57,12 +56,22 @@ const die = (msg: string): never => {
   process.exit(1);
 };
 
-// Топология workspace — считаем один раз. В single-repo (projectsDir === ".") проект
-// неявный (единственный в workspace), и CLI разрешает опускать <project> в аргументах.
-const projectsDir = await resolveProjectsDir(orch);
-const singleRepo = projectsDir === ".";
-const soleProject = singleRepo ? (await listProjects(orch))[0] : undefined;
-const projCtx = { singleRepo, soleProject };
+// Workspace — resolved lazily (loadWorkspace) only for commands that need it, so `help`
+// works from any directory. В single-repo (projectsDir === ".") проект неявный
+// (единственный в workspace), и CLI разрешает опускать <project> в аргументах.
+let orch: string;
+let projectsDir: string;
+let singleRepo: boolean;
+let projCtx: { singleRepo: boolean; soleProject: string | undefined };
+
+async function loadWorkspace() {
+  orch = resolveOrch(); // WorkspaceNotFoundError → dispatcher's catch → `wt: <message>`, exit 1
+  projectsDir = await resolveProjectsDir(orch);
+  singleRepo = projectsDir === ".";
+  const soleProject = singleRepo ? (await listProjects(orch))[0] : undefined;
+  projCtx = { singleRepo, soleProject };
+  await migrateBaseSlugArtifacts(orch); // одноразовый ренейм -main.*→-base.* (M2.5)
+}
 
 async function cmdPort() {
   const positional = args.filter((a) => !a.startsWith("--"));
@@ -441,11 +450,11 @@ const table: Record<string, () => Promise<void>> = {
   "-h": cmdHelp,
 };
 const handler = cmd ? table[cmd] : cmdHelp; // без команды → help
-await migrateBaseSlugArtifacts(orch); // одноразовый ренейм -main.*→-base.* (M2.5)
 if (handler) {
   // Без этого любой throw из ядра доезжал до пользователя стеком Bun, а сообщение
   // (причина отказа docker) тонуло. WT_DEBUG=1 возвращает стек.
   try {
+    if (handler !== cmdHelp) await loadWorkspace();
     await handler();
   } catch (e) {
     if (process.env.WT_DEBUG) console.error(e);

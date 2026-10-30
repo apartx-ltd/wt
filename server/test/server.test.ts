@@ -1,4 +1,7 @@
 import { test, expect, afterAll } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { createServer } from "../src/index";
 import { WT_PROTOCOL_VERSION, type Worktree, type RunInstance, type BaseSpec } from "#shared";
 
@@ -6,6 +9,8 @@ import { WT_PROTOCOL_VERSION, type Worktree, type RunInstance, type BaseSpec } f
 // (no real orchestrator/git). mergeInstances still runs in the server. Action paths
 // (start/stop/rm/link/logs/new) keep going through the wt subprocess → wtBin stub.
 const STUB = new URL("./fixtures/wt-stub.sh", import.meta.url).pathname;
+// Explicit empty workspace root: the default resolveOrch() would search upward from cwd.
+const ORCH = mkdtempSync(resolve(tmpdir(), "wt-server-orch-"));
 const WORKTREES: Worktree[] = [
   { project: "apartx-cabinet", slug: "x", branch: "feature/x", port: 4231, path: "/w/x" },
   { project: "apartx-spaces", slug: "y", branch: "feature/y", port: 3512, path: "/w/y" },
@@ -25,10 +30,14 @@ const EMPTY_READERS = {
   readProjects: async () => [] as string[],
   readBases: async () => [] as BaseSpec[],
 };
-const server = createServer({ wtBin: STUB, port: 0, pollMs: 50, ...READERS });
-const emptyServer = createServer({ wtBin: STUB, port: 0, pollMs: 50, ...EMPTY_READERS });
+const server = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...READERS });
+const emptyServer = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...EMPTY_READERS });
 
-afterAll(() => { server.stop(true); emptyServer.stop(true); });
+afterAll(() => {
+  server.stop(true);
+  emptyServer.stop(true);
+  rmSync(ORCH, { recursive: true, force: true });
+});
 
 test("GET /api/health reports the protocol version", async () => {
   const res = await fetch(`http://localhost:${server.port}/api/health`);
@@ -49,6 +58,7 @@ test("GET /api/instances returns merged list", async () => {
 test("GET /api/instances includes a synthetic base row from readBases", async () => {
   const s = createServer({
     wtBin: STUB,
+    orch: ORCH,
     port: 0,
     pollMs: 50,
     readWorktrees: async () => [],
@@ -158,7 +168,7 @@ test("DELETE /api/worktrees/:p/:slug returns exit code", async () => {
 });
 
 test("GET /api/meta returns the injected title", async () => {
-  const s = createServer({ wtBin: STUB, port: 0, pollMs: 50, ...READERS, readTitle: async () => "My Workspace" });
+  const s = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...READERS, readTitle: async () => "My Workspace" });
   const res = await fetch(`http://localhost:${s.port}/api/meta`);
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ title: "My Workspace" });
@@ -166,7 +176,7 @@ test("GET /api/meta returns the injected title", async () => {
 });
 
 test("GET /api/meta returns null title when unset", async () => {
-  const s = createServer({ wtBin: STUB, port: 0, pollMs: 50, ...READERS, readTitle: async () => null });
+  const s = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...READERS, readTitle: async () => null });
   const res = await fetch(`http://localhost:${s.port}/api/meta`);
   expect(await res.json()).toEqual({ title: null });
   s.stop(true);
