@@ -154,7 +154,7 @@ export async function loadConfig(orch: string, repoName = "app"): Promise<Resolv
 /**
  * Конфиг ОДНОГО проекта для (project) в оркестраторе `orch`. Если у корня есть
  * `wt.config.ts` — берём оттуда (config-driven, M1+). Иначе синтезируем паритетный
- * host-only конфиг (`@wt/plugin-meteor`, без docker), чтобы start/new работали в
+ * host-only конфиг (`@apartx/wt/plugin-meteor`, без docker), чтобы start/new работали в
  * тестах с временными orch-каталогами и в single-repo без файла.
  */
 export async function resolveProjectConfig(orch: string, project: string): Promise<ResolvedProjectConfig> {
@@ -222,5 +222,5 @@ export async function resolveLinkSpecs(orch: string): Promise<string[]> {
 
 /** Паритетный конфиг при отсутствии записи в `wt.config.ts`: host-meteor, без docker. */
 function fallbackProjectConfig(_project: string): ResolvedProjectConfig {
-  return { plugin: "@wt/plugin-meteor" };
+  return { plugin: "@apartx/wt/plugin-meteor" };
 }

@@ -12,7 +12,7 @@ const WT_CONFIG = `
 import { defineWorkspace } from ${JSON.stringify(CONFIG_SRC)};
 export default defineWorkspace({
   branches: { base: "develop", prefix: "feature/" },
-  defaults: { plugin: "@wt/plugin-meteor" },
+  defaults: { plugin: "@apartx/wt/plugin-meteor" },
   projects: {
     "apartx-cabinet": {},
     "apartx-server": {},

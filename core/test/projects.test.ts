@@ -6,7 +6,7 @@ import { listProjects } from "../src/projects";
 
 const singleRepoConfig = () =>
   `import { defineWorkspace } from "${resolve(import.meta.dir, "../src/config")}";\n` +
-  `export default defineWorkspace({ branches: { base: "main", prefix: "feat/" }, project: { plugin: "@wt/plugin-node" } });\n`;
+  `export default defineWorkspace({ branches: { base: "main", prefix: "feat/" }, project: { plugin: "@apartx/wt/plugin-node" } });\n`;
 
 // Built at runtime: a `.git` marker file can't be committed (git rejects paths
 // with a `.git` component), so we synthesize the fixture orchestrator in a temp dir.

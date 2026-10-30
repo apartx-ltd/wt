@@ -10,13 +10,13 @@ const HEADER = "# СГЕНЕРИРОВАНО scripts/worktree-env.sh — НЕ р
 const ctx = (over: any = {}) => ({
   orch: "/o", project: "apartx-server", slug: "feat-x", branch: "feature/x",
   projectDir: "/o/projects/apartx-server", worktreeDir: "/o/worktrees/apartx-server/feat-x",
-  config: { plugin: "@wt/plugin-meteor", docker: { image: "meteor-dev:3.4" } },
+  config: { plugin: "@apartx/wt/plugin-meteor", docker: { image: "meteor-dev:3.4" } },
   port: 4020, offset: 20, container: "wtdev-apartx-server-feat-x",
   mode: "docker", extraPorts: { hmr: 8105 }, ...over,
 });
 
 test("PARITY (integration): plugin envLines → generateEnvWorktree reproduces the byte-identical .env.worktree", async () => {
-  const p = await loadPlugin("@wt/plugin-meteor");
+  const p = await loadPlugin("@apartx/wt/plugin-meteor");
   const out = generateEnvWorktree({
     project: "apartx-server", branch: "feature/x", offset: 20,
     basePort: 4000, baseRootUrl: "http://build.apartx.kz:4000",
@@ -31,7 +31,7 @@ test("PARITY (integration): plugin envLines → generateEnvWorktree reproduces t
 });
 
 test("PARITY: docker mounts + owned volumes match the legacy -v block", async () => {
-  const d = (await loadPlugin("@wt/plugin-meteor")).docker!(ctx() as any);
+  const d = (await loadPlugin("@apartx/wt/plugin-meteor")).docker!(ctx() as any);
   expect(d.mounts).toEqual([
     "/o/worktrees/apartx-server/feat-x:/opt/app",
     "wtdev-apartx-server-feat-x-node_modules:/opt/app/node_modules",
@@ -45,13 +45,13 @@ test("PARITY: docker mounts + owned volumes match the legacy -v block", async ()
 });
 
 test("PARITY: meteor inner dev command — docker literal port, host $PORT", async () => {
-  const p = await loadPlugin("@wt/plugin-meteor");
+  const p = await loadPlugin("@apartx/wt/plugin-meteor");
   expect(p.devCommand(ctx() as any).argv).toEqual(["meteor", "run", "--port", "4020"]);
   expect(p.devCommand(ctx({ mode: "host" }) as any).argv).toEqual(["meteor", "run", "--port", "$PORT"]);
 });
 
 test("PARITY: env lines, install, isolated-db", async () => {
-  const p = await loadPlugin("@wt/plugin-meteor");
+  const p = await loadPlugin("@apartx/wt/plugin-meteor");
   expect(p.envLines!(ctx() as any)).toEqual(["RSPACK_DEVSERVER_PORT=8105", "HMR_PUBLIC_PORT=8105"]);
   expect(p.install(ctx() as any).argv).toEqual(["meteor", "npm", "install"]);
   expect(p.isolatedDb!.urlEnvKey).toBe("MONGO_URL");

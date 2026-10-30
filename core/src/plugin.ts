@@ -133,10 +133,21 @@ export function registerPlugin(name: string, plugin: StackPlugin): void {
 }
 
 /**
+ * Прежние приватные workspace-имена плагинов → публичные specifier'ы. Старое имя не
+ * резолвится молча: конфиг пользователя должен быть обновлён явно.
+ */
+const LEGACY_PLUGIN_IDS: Record<string, string> = {
+  "@wt/plugin-meteor": "@apartx/wt/plugin-meteor",
+  "@wt/plugin-node": "@apartx/wt/plugin-node",
+};
+
+/**
  * Загрузить плагин по имени пакета. Сейчас — только из реестра бандл-плагинов
  * (M0–M3); npm-резолв — открытый вопрос M4 (design.md).
  */
 export async function loadPlugin(name: string): Promise<StackPlugin> {
+  const renamed = LEGACY_PLUGIN_IDS[name];
+  if (renamed) throw new Error(`plugin: "${name}" was renamed to "${renamed}" — update "plugin" in wt.config.ts`);
   const p = REGISTRY.get(name);
   if (!p) throw new Error(`plugin: неизвестный плагин: ${name} (зарегистрированы: ${[...REGISTRY.keys()].join(", ") || "—"})`);
   if (p.apiVersion !== PLUGIN_API_VERSION) {

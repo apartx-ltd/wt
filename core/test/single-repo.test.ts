@@ -10,7 +10,7 @@ beforeAll(() => registerBundledPlugins());
 
 /**
  * Собрать одноразовый single-repo: git-репо с `wt.config.ts` (`project: { plugin:
- * "@wt/plugin-node" }`) + минимальное node-приложение. Ни одного apartx-знания —
+ * "@apartx/wt/plugin-node" }`) + минимальное node-приложение. Ни одного apartx-знания —
  * чистый node-проект, по которому wt должен ездить как по любому bare-репо.
  *
  * Дефолтную ветку явно ренеймим в `main` (init.defaultBranch у хоста может быть
@@ -33,7 +33,7 @@ async function makeSingleRepo(): Promise<string> {
   await writeFile(
     resolve(orch, "wt.config.ts"),
     `import { defineWorkspace } from "${resolve(import.meta.dir, "../src/config")}";\n` +
-      `export default defineWorkspace({ title: "myapp", branches: { base: "main", prefix: "feat/" }, project: { plugin: "@wt/plugin-node" } });\n`,
+      `export default defineWorkspace({ title: "myapp", branches: { base: "main", prefix: "feat/" }, project: { plugin: "@apartx/wt/plugin-node" } });\n`,
   );
   await Bun.spawn(["git", "-C", orch, "add", "-A"]).exited;
   await Bun.spawn(["git", "-C", orch, "commit", "-q", "-m", "init"]).exited;

@@ -22,12 +22,12 @@ A Bun workspace (`bun install` at this directory installs all packages):
 | `server/` | `@wt/server` | HTTP/JSON status server backing the web dashboard |
 | `tui/` | `@wt/tui` | Full-screen terminal UI (opentui/SolidJS) — `wt ui` |
 | `web/` | `@wt/web` | Web dashboard (SvelteKit + apartx-ui) — `wt web` |
-| `plugins/meteor/` | `@wt/plugin-meteor` | Meteor stack plugin (install/run/docker/isolated-db) |
-| `plugins/node/` | `@wt/plugin-node` | Generic Node stack plugin (`npm install` / `npm run dev -- --port`, inline env) — default for bare repos |
+| `plugins/meteor/` | `@apartx/wt/plugin-meteor` | Meteor stack plugin (install/run/docker/isolated-db) |
+| `plugins/node/` | `@apartx/wt/plugin-node` | Generic Node stack plugin (`npm install` / `npm run dev -- --port`, inline env) — default for bare repos |
 | `plugins/registry/` | `@wt/plugins` | Bundled-plugin registry (`registerBundledPlugins()`), wired at entrypoints |
 
-**Dependency direction** (acyclic): `cli/server/tui → @wt/plugins → {@wt/core, @wt/plugin-meteor}`,
-`@wt/plugin-meteor → @wt/core → @wt/shared`. The core **never imports a plugin** — plugins are
+**Dependency direction** (acyclic): `cli/server/tui → @wt/plugins → {@wt/core, @apartx/wt/plugin-meteor}`,
+`@apartx/wt/plugin-meteor → @wt/core → @wt/shared`. The core **never imports a plugin** — plugins are
 resolved at runtime from a registry, so the engine stays stack-agnostic.
 
 ## Commands
@@ -65,7 +65,7 @@ export default defineWorkspace({
   projectsDir: "projects",                       // multi-repo (or `project: {…}` for single-repo)
   ports: { step: 10 },
   branches: { base: "develop", prefix: "feature/" },
-  defaults: { plugin: "@wt/plugin-meteor" },
+  defaults: { plugin: "@apartx/wt/plugin-meteor" },
   projects: {
     "apartx-server":  { docker: { image: "meteor-dev:3.4" }, core: { slug: "base" } },
     "apartx-spaces":  {},                          // host-mode meteor (no docker)
@@ -133,11 +133,11 @@ The engine is a strangler migration of the legacy bash `wt` (`scripts/wt-legacy`
 earlier M4 work). Config + plugin foundation is complete:
 
 - **M0+M1 (done):** `StackPlugin` interface + config layer; all Meteor specifics extracted into
-  `@wt/plugin-meteor`; apartx runs through the config+plugin path with byte-identical behavior.
+  `@apartx/wt/plugin-meteor`; apartx runs through the config+plugin path with byte-identical behavior.
 - **M2 (done):** `DOCKERIZED`/`DEV_IMAGE` deleted — dockerized detection and image come from `config.docker.image`.
 - **M2.5 (done):** branch convention (`branches.{base,prefix}`), core stack (`core.slug`), and link mesh (`links`) all come from config; the base-checkout slug is renamed `"main"`→`"base"` (one-time run-state migration); `wt new` forks explicitly from `branches.base`, and `wt up` starts the base checkouts of the core projects.
 - **M2.6 (done):** plugin↔core boundary hermeticized (parity, byte-identical via `parity.test.ts`) — `METEOR_WATCH_*` → `plugin.docker().env`, mongo `directConnection` → `plugin.docker().envLineFilter`, `MONTI_*`/`MONGO_OPLOG_URL=`/isolated-`MONGO_URL` → `plugin.worktreeEnvTail()` + `isolatedDb.deriveUrl`, and `StartOptions.link` relaxed `"all"|"apartx-server"`→`"all"|string` (last apartx literal out of core); HMR base-port generalization deferred to M3.
-- **M3 (done):** `@wt/plugin-node` shipped (generic `npm install` / `npm run dev -- --port`, inline env); the hardcoded HMR port generalized into a stack-agnostic `ExtraPortSpec` (meteor declares its own `hmr`/`8085`/`RSPACK_DEVSERVER_PORT`, core has zero stack literals); inline env-injection layers `.env`/`.env.worktree` in core so a non-`dotenvx` plugin runs detached; single-repo path resolution (`projectsDir "."` → repo root) wired through `new`/`start`/`port`/`list`; proven end-to-end by `core/test/single-repo.test.ts` driving a bare node repo with zero apartx knowledge.
+- **M3 (done):** `@apartx/wt/plugin-node` shipped (generic `npm install` / `npm run dev -- --port`, inline env); the hardcoded HMR port generalized into a stack-agnostic `ExtraPortSpec` (meteor declares its own `hmr`/`8085`/`RSPACK_DEVSERVER_PORT`, core has zero stack literals); inline env-injection layers `.env`/`.env.worktree` in core so a non-`dotenvx` plugin runs detached; single-repo path resolution (`projectsDir "."` → repo root) wired through `new`/`start`/`port`/`list`; proven end-to-end by `core/test/single-repo.test.ts` driving a bare node repo with zero apartx knowledge.
 - **M4 (done):** OSS polish (*pragmatic core*) — plugin `apiVersion` + load-time compat check,
   configurable workspace `title` surfaced to both frontends, config-driven (de-hardcoded)
   `--server` link target (`config.serverProject`), single-repo CLI ergonomics (drop the

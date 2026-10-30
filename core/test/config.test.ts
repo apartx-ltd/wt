@@ -15,7 +15,7 @@ test("defineWorkspace returns its argument unchanged (identity helper for types)
     title: "t",
     projectsDir: "projects",
     branches: { base: "develop", prefix: "feature/" },
-    defaults: { plugin: "@wt/plugin-meteor" },
+    defaults: { plugin: "@apartx/wt/plugin-meteor" },
     projects: { a: { docker: { image: "img:1" }, core: { slug: "base" } } },
     links: ["a:b:env:X"],
   });
@@ -25,27 +25,27 @@ test("defineWorkspace returns its argument unchanged (identity helper for types)
 
 test("resolveConfig deep-merges defaults into each project (nested docker merged, scalars overridden)", () => {
   const r = resolveConfig({
-    defaults: { plugin: "@wt/plugin-meteor", docker: { image: "base:1" } },
+    defaults: { plugin: "@apartx/wt/plugin-meteor", docker: { image: "base:1" } },
     projects: {
       a: { core: { slug: "base" } },                 // inherits plugin + docker.image
       b: { docker: { image: "own:2" } },             // overrides docker.image, inherits plugin
     },
   });
-  expect(r.projects.a.plugin).toBe("@wt/plugin-meteor");
+  expect(r.projects.a.plugin).toBe("@apartx/wt/plugin-meteor");
   expect(r.projects.a.docker?.image).toBe("base:1");
   expect(r.projects.a.core?.slug).toBe("base");
-  expect(r.projects.b.plugin).toBe("@wt/plugin-meteor");
+  expect(r.projects.b.plugin).toBe("@apartx/wt/plugin-meteor");
   expect(r.projects.b.docker?.image).toBe("own:2");
 });
 
 test("resolveConfig normalizes single-repo project to a one-entry map with projectsDir '.'", () => {
   const r = resolveConfig({
-    project: { plugin: "@wt/plugin-node" },
+    project: { plugin: "@apartx/wt/plugin-node" },
     branches: { base: "main", prefix: "feat/" },
   }, "myapp");
   expect(r.projectsDir).toBe(".");
   expect(Object.keys(r.projects)).toEqual(["myapp"]);
-  expect(r.projects.myapp.plugin).toBe("@wt/plugin-node");
+  expect(r.projects.myapp.plugin).toBe("@apartx/wt/plugin-node");
 });
 
 test("resolveConfig defaults branches/ports/projectsDir when omitted", () => {
@@ -75,23 +75,23 @@ test("validateConfig passes a project that inherits plugin from defaults", () =>
 
 test("apartx wt.config.ts loads and validates", async () => {
   const cfg = await loadConfig(resolveOrchRoot());
-  expect(cfg.projects["apartx-server"].plugin).toBe("@wt/plugin-meteor");
+  expect(cfg.projects["apartx-server"].plugin).toBe("@apartx/wt/plugin-meteor");
   expect(cfg.projects["apartx-server"].docker?.image).toBe("meteor-dev:3.4");
-  expect(cfg.projects["apartx-spaces"].plugin).toBe("@wt/plugin-meteor"); // from defaults
+  expect(cfg.projects["apartx-spaces"].plugin).toBe("@apartx/wt/plugin-meteor"); // from defaults
 });
 
 test("resolveProjectConfig: listed project from config, unlisted falls back to constants parity", async () => {
   const orch = resolveOrchRoot();
   // listed dockerized core project → from config (mirrors constants exactly)
   const server = await resolveProjectConfig(orch, "apartx-server");
-  expect(server.plugin).toBe("@wt/plugin-meteor");
+  expect(server.plugin).toBe("@apartx/wt/plugin-meteor");
   expect(server.docker?.image).toBe("meteor-dev:3.4");
   // unlisted host project → fallback (constants); host-meteor, no docker.
   // Имя нельзя брать «на глазок»: раньше здесь стоял apartx-whatsapp, его перевели в
   // docker — и тест покраснел от правки конфига, а не движка. Нужен проект, который
   // в wt.config.ts не объявлен (apartx-geoip — host-режим).
   const unlisted = await resolveProjectConfig(orch, "apartx-geoip");
-  expect(unlisted.plugin).toBe("@wt/plugin-meteor");
+  expect(unlisted.plugin).toBe("@apartx/wt/plugin-meteor");
   expect(unlisted.docker).toBeUndefined();
 });
 
@@ -158,7 +158,7 @@ test("resolveProjectsDir returns '.' for single-repo config, 'projects' for mult
     writeFileSync(
       resolve(orch, "wt.config.ts"),
       `import { defineWorkspace } from "${resolve(import.meta.dir, "../src/config")}";\n` +
-        `export default defineWorkspace({ branches: { base: "main", prefix: "feat/" }, project: { plugin: "@wt/plugin-node" } });\n`,
+        `export default defineWorkspace({ branches: { base: "main", prefix: "feat/" }, project: { plugin: "@apartx/wt/plugin-node" } });\n`,
     );
     expect(await resolveProjectsDir(orch)).toBe(".");
   } finally {
@@ -178,12 +178,12 @@ test("resolveProjectsDir returns 'projects' when there is no wt.config.ts", asyn
 });
 
 test("resolveConfig carries serverProject", () => {
-  const r = resolveConfig({ serverProject: "srv", projects: { srv: { plugin: "@wt/plugin-node" } } }, "x");
+  const r = resolveConfig({ serverProject: "srv", projects: { srv: { plugin: "@apartx/wt/plugin-node" } } }, "x");
   expect(r.serverProject).toBe("srv");
 });
 
 test("resolveConfig serverProject defaults to null", () => {
-  const r = resolveConfig({ projects: { a: { plugin: "@wt/plugin-node" } } }, "x");
+  const r = resolveConfig({ projects: { a: { plugin: "@apartx/wt/plugin-node" } } }, "x");
   expect(r.serverProject ?? null).toBeNull();
 });
 
@@ -194,7 +194,7 @@ test("resolveServerProject reads serverProject from wt.config.ts; null when unse
     writeFileSync(
       resolve(orch, "wt.config.ts"),
       `import { defineWorkspace } from "${resolve(import.meta.dir, "../src/config")}";\n` +
-        `export default defineWorkspace({ serverProject: "srv", projects: { srv: { plugin: "@wt/plugin-node" } } });\n`,
+        `export default defineWorkspace({ serverProject: "srv", projects: { srv: { plugin: "@apartx/wt/plugin-node" } } });\n`,
     );
     expect(await resolveServerProject(orch)).toBe("srv");
   } finally {

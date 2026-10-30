@@ -17,7 +17,7 @@ const WT_CONFIG = `
 import { defineWorkspace } from ${JSON.stringify(CONFIG_SRC)};
 export default defineWorkspace({
   branches: { base: "develop", prefix: "feature/" },
-  defaults: { plugin: "@wt/plugin-meteor" },
+  defaults: { plugin: "@apartx/wt/plugin-meteor" },
   projects: {
     "apartx-server": { docker: { image: "meteor-dev:3.4" } },
     "apartx-cabinet": { docker: { image: "meteor-dev:3.4" } },
@@ -313,7 +313,7 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
 const FORK_CONFIG = `
 import { defineWorkspace } from ${JSON.stringify(CONFIG_SRC)};
 import { registerPlugin, PLUGIN_API_VERSION } from ${JSON.stringify(resolve(import.meta.dir, "../src/plugin"))};
-registerPlugin("@wt/plugin-noop", {
+registerPlugin("@apartx/wt/plugin-noop", {
   name: "noop",
   apiVersion: PLUGIN_API_VERSION,
   install: () => ({ argv: ["true"] }),
@@ -321,7 +321,7 @@ registerPlugin("@wt/plugin-noop", {
 });
 export default defineWorkspace({
   branches: { base: "develop", prefix: "feature/" },
-  defaults: { plugin: "@wt/plugin-noop" },
+  defaults: { plugin: "@apartx/wt/plugin-noop" },
   projects: { "proj": {} },
 });
 `;
