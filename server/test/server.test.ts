@@ -325,7 +325,26 @@ describe("bind host and cross-origin guard", () => {
         body: JSON.stringify({ project: "p" }),
       });
       expect((await fetch(url, init("http://192.168.1.5:4499", "192.168.1.5:4499"))).status).toBe(400);
+      expect((await fetch(url, init("http://[fd00::5]:4499", "[fd00::5]:4499"))).status).toBe(400);
       expect((await fetch(url, init("https://evil.example", "192.168.1.5:4499"))).status).toBe(403);
+    } finally {
+      lan.stop(true);
+    }
+  });
+
+  test("a LAN bind refuses a same-origin write by DNS name (DNS rebinding)", async () => {
+    const lan = createServer({ wtBin: STUB, orch: ORCH, port: 0, hostname: "0.0.0.0", ...EMPTY_READERS });
+    try {
+      const p = lan.port;
+      const url = `http://127.0.0.1:${p}/api/worktrees`;
+      const init = (origin: string, host: string): RequestInit => ({
+        method: "POST",
+        headers: { Origin: origin, Host: host },
+        body: JSON.stringify({ project: "p" }),
+      });
+      // evil.example rebound to this machine: Origin and Host match, but it is a DNS name.
+      expect((await fetch(url, init(`http://evil.example:${p}`, `evil.example:${p}`))).status).toBe(403);
+      expect((await fetch(url, init(`http://127.0.0.1:${p}`, `127.0.0.1:${p}`))).status).toBe(400);
     } finally {
       lan.stop(true);
     }

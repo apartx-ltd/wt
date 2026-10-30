@@ -96,29 +96,37 @@ async function serveStatic(staticDir: string, pathname: string): Promise<Respons
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
+const isIpLiteral = (hostname: string): boolean =>
+  /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || /^\[[0-9a-f:.]+\]$/i.test(hostname);
+
 /**
  * True if a state-changing request must be refused as cross-origin: it carries an
  * `Origin` whose host is not loopback. Requests without `Origin` (curl, the TUI, the
  * CLI) and same-origin dashboard fetches pass; a page on another site (or a DNS-rebound
- * name) cannot drive `wt` through the visitor's browser. When the daemon is bound to a
- * non-loopback interface (LAN opt-in), an `Origin` equal to the request's `Host` is
- * also accepted so the dashboard keeps working when opened by its LAN address.
+ * name) cannot drive `wt` through the visitor's browser.
+ *
+ * When the daemon is bound to a non-loopback interface (LAN opt-in), a same-origin write
+ * (`Origin` host:port equal to `Host`) is also accepted so the dashboard keeps working
+ * when opened by its LAN address — but only when that host is an IP literal or the
+ * configured bind host. A DNS name the attacker controls could otherwise be rebound to
+ * this machine, making its Origin and Host match.
  */
-function isCrossOriginWrite(req: Request, loopbackBind: boolean): boolean {
+function isCrossOriginWrite(req: Request, bindHost: string, loopbackBind: boolean): boolean {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return false;
   const origin = req.headers.get("origin");
   if (origin === null) return false;
-  let host: string;
+  let hostname: string;
   let originHost: string;
   try {
     const u = new URL(origin);
-    host = u.hostname;
+    hostname = u.hostname;
     originHost = u.host;
   } catch {
     return true; // "null" (sandboxed/opaque origins) or garbage
   }
-  if (LOOPBACK_HOSTS.has(host)) return false;
-  return loopbackBind || originHost !== req.headers.get("host");
+  if (LOOPBACK_HOSTS.has(hostname)) return false;
+  if (loopbackBind || originHost !== req.headers.get("host")) return true;
+  return !(isIpLiteral(hostname) || hostname === bindHost.toLowerCase());
 }
 
 export function createServer(serverOpts: ServerOpts = {}) {
@@ -139,7 +147,7 @@ export function createServer(serverOpts: ServerOpts = {}) {
     async fetch(req) {
       const url = new URL(req.url);
 
-      if (isCrossOriginWrite(req, loopbackBind)) {
+      if (isCrossOriginWrite(req, hostname, loopbackBind)) {
         return Response.json({ error: "cross-origin requests are not allowed" }, { status: 403 });
       }
 

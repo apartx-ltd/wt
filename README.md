@@ -199,7 +199,9 @@ depend on it: `web/build` ships prebuilt in the tarball (`prepack` runs `build:w
   `Origin` is not a loopback address (a web page on another site cannot drive it through your
   browser). `WT_SERVER_HOST=0.0.0.0` opts into exposing it on the LAN — still with no
   authentication, so anyone who can reach the port controls your worktrees; do that only on a
-  trusted network.
+  trusted network. In that mode the dashboard's own same-origin requests are also accepted when
+  it is opened by an IP address (`http://192.168.1.5:4499`) or by the `WT_SERVER_HOST` name, but
+  not by any other host name — that would let a DNS-rebinding page pass as same-origin.
 
 ## License
 
