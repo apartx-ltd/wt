@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@wt/root",
+      "name": "@apartx/wt",
       "dependencies": {
         "@opentui/core": "0.4.1",
         "@opentui/solid": "0.4.1",
