@@ -1,23 +1,23 @@
 @import 'tailwindcss';
 
-/* Scan the vendored kit + app sources for Tailwind class usage. */
-@source './lib/apartx-ui/src/lib/**/*.{svelte,ts}';
+/* Scan the kit (installed git devDependency) + app sources for Tailwind class usage. */
+@source '../node_modules/apartx-ui/src/lib/**/*.{svelte,ts}';
 @source './**/*.{svelte,js,ts}';
 
 /*
  * Design tokens → Tailwind mapping (colors incl. tonal surface-containers,
  * shape, elevation) + typescale @utility classes. Single source of truth is the
  * apartx-ui kit. The `--color-*` read through `--theme-*`, defined by the static
- * `:root` / `html.dark` blocks below (no runtime applyTheme → SSR-safe).
+ * `:root` / `html.dark` blocks below (no runtime applyTheme).
  */
 @import 'apartx-ui/styles/tokens.css';
 @import 'apartx-ui/styles/typescale.css';
 
 /*
  * Static ApartX-blue (M3) palette — defined in CSS, not the kit's runtime
- * applyTheme(). This app is SSR (adapter-node): a JS palette would flash light
- * before hydration. SSR sets `<html class="light|dark">` from the `theme` cookie
- * (hooks.server.ts), so the correct block paints on first byte. `:root` = light;
+ * applyTheme(): a JS palette would flash light before the app boots. An inline
+ * script in app.html sets `<html class="light|dark">` from `localStorage.theme`
+ * before first paint, so the correct block applies immediately. `:root` = light;
  * `html.dark` = dark (dark wins by source order). Mirrors apartx-help.
  */
 :root {
@@ -130,7 +130,7 @@ html.dark {
   --font-sans: 'Roboto', 'Helvetica', 'Arial', system-ui, sans-serif;
 }
 
-/* Paint the page backdrop from the theme token on first paint (SSR sets class). */
+/* Paint the page backdrop from the theme token on first paint (app.html sets class). */
 html,
 body {
   background-color: var(--theme-surface);
