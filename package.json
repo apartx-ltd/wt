@@ -2,7 +2,7 @@
   "name": "@apartx/wt",
   "version": "0.1.0",
   "description": "Git-worktree dev orchestrator: one worktree per branch with deterministic ports, per-worktree env, cross-service links, host/docker instances, TUI and web dashboard",
-  "keywords": ["git", "worktree", "dev", "orchestrator", "bun", "meteor", "monorepo", "ports", "tui"],
+  "keywords": ["git", "worktree", "dev", "orchestrator", "bun", "meteor", "node", "rust", "cargo", "monorepo", "ports", "tui"],
   "license": "MIT",
   "homepage": "https://github.com/apartx-ltd/wt#readme",
   "bugs": { "url": "https://github.com/apartx-ltd/wt/issues" },
@@ -14,6 +14,7 @@
     "./plugin": "./core/src/plugin.ts",
     "./plugin-meteor": "./plugins/meteor/src/index.ts",
     "./plugin-node": "./plugins/node/src/index.ts",
+    "./plugin-rust": "./plugins/rust/src/index.ts",
     "./config-schema": "./core/schema/wt.config.schema.json"
   },
   "imports": {
@@ -22,7 +23,8 @@
     "#core/plugin": "./core/src/plugin.ts",
     "#plugins": "./plugins/registry/src/index.ts",
     "#plugin-meteor": "./plugins/meteor/src/index.ts",
-    "#plugin-node": "./plugins/node/src/index.ts"
+    "#plugin-node": "./plugins/node/src/index.ts",
+    "#plugin-rust": "./plugins/rust/src/index.ts"
   },
   "files": [
     "index.ts",
@@ -36,6 +38,7 @@
     "tui/src",
     "plugins/meteor/src",
     "plugins/node/src",
+    "plugins/rust/src",
     "plugins/registry/src",
     "web/build",
     "bunfig.toml",

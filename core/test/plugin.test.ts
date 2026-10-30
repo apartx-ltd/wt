@@ -75,3 +75,8 @@ test("loadPlugin rejects legacy @wt/plugin-* ids with a rename hint instead of r
   await expect(loadPlugin("@wt/plugin-meteor")).rejects.toThrow(/renamed to "@apartx\/wt\/plugin-meteor"/);
   await expect(loadPlugin("@wt/plugin-node")).rejects.toThrow(/renamed to "@apartx\/wt\/plugin-node"/);
 });
+
+test("registerBundledPlugins registers the Rust plugin", async () => {
+  registerBundledPlugins();
+  expect(await loadPlugin("@apartx/wt/plugin-rust")).toMatchObject({ name: "rust" });
+});

@@ -10,6 +10,7 @@
     "server/src", "server/test",
     "tui/src", "tui/test", "tui/bin",
     "core/src", "core/test",
-    "cli/src", "cli/bin", "cli/test"
+    "cli/src", "cli/bin", "cli/test",
+    "plugins/*/src", "plugins/*/test"
   ]
 }
