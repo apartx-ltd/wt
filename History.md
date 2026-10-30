@@ -1,5 +1,18 @@
 # History
 
+## Unreleased
+
+- New bundled plugin `@apartx/wt/plugin-rust` for cargo projects: `cargo fetch` / `cargo run`
+  (or the project's `dev` cargo alias), the port reaches the binary through `PORT` only,
+  `target/` is the restorable artifact; docker layout with a `target` volume per worktree and
+  shared cargo caches.
+- Plugin contract: optional `deps: { dir, files }` lets a plugin declare where its dependencies
+  live and which files fingerprint them. The core's install/staleness check, stamp and docker
+  deps volume follow it; without it the node layout (`node_modules`, npm files) is used as
+  before, so existing plugins and volumes are unchanged.
+- `wt rm` removes the volumes the project's plugin declares as its own (`docker().ownedVolumes`)
+  instead of the fixed node_modules/meteor_local pair.
+
 ## 0.1.0 — 2026-10-30
 
 First public release. Extracted from the apartx orchestrator (`tools/wt`, 2026-06 → 2026-10).

@@ -9,7 +9,7 @@ editing env files or picking ports by hand.
 
 The engine is generic and driven by one `wt.config.ts` at the workspace root. What is
 stack-specific (how to install dependencies, how to start the dev server, Docker mounts,
-isolated databases) lives in plugins; Node and Meteor plugins are bundled. A terminal UI
+isolated databases) lives in plugins; Node, Meteor and Rust plugins are bundled. A terminal UI
 (`wt ui`) and a web dashboard (`wt web`) show what runs where.
 
 ## Install
@@ -152,13 +152,14 @@ that started it.
 
 - [docs/config.md](docs/config.md) — the `wt.config.ts` reference: every field, single-repo vs
   multi-repo, `links`, `env` templates, editor types and the JSON schema.
-- [docs/plugins.md](docs/plugins.md) — the `StackPlugin` contract, the bundled Node and Meteor
-  plugins, env layering and the `.env.worktree` lifecycle.
+- [docs/plugins.md](docs/plugins.md) — the `StackPlugin` contract, the bundled Node, Meteor and
+  Rust plugins, env layering and the `.env.worktree` lifecycle.
 - [docs/agents.md](docs/agents.md) — for coding agents: a checklist to set up a workspace, and a
   block to paste into the workspace's `AGENTS.md` / `CLAUDE.md` so later sessions use `wt`
   instead of hand-made worktrees and ports. [AGENTS.md](AGENTS.md) is for working on `wt` itself.
 
-Plugin ids are package specifiers: `"@apartx/wt/plugin-node"` and `"@apartx/wt/plugin-meteor"`.
+Plugin ids are package specifiers: `"@apartx/wt/plugin-node"`, `"@apartx/wt/plugin-meteor"` and
+`"@apartx/wt/plugin-rust"`.
 **Migrating from the pre-release ids:** `"@wt/plugin-node"` and `"@wt/plugin-meteor"` are no
 longer accepted — `wt` stops with a `renamed to …` error before it creates anything (no
 worktree or branch is left behind); replace them in `wt.config.ts`.
