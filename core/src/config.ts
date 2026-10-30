@@ -79,6 +79,8 @@ export interface ResolvedConfig {
   branches: BranchConfig;
   ports: { step: number };
   links: string[];
+  /** `defaults` as written (empty object when unset) — the config of a project the file does not list. */
+  defaults: ProjectConfig;
 }
 
 /** Recursive merge: nested plain objects are merged, scalars/arrays are replaced by `override`. */
@@ -119,6 +121,7 @@ export function resolveConfig(config: WorkspaceConfig, repoName = "app"): Resolv
     branches: config.branches ?? { base: "main", prefix: "feature/" },
     ports: { step: config.ports?.step ?? 10 },
     links: config.links ?? [],
+    defaults,
   };
 }
 
@@ -155,22 +158,21 @@ export async function loadConfig(orch: string, repoName = "app"): Promise<Resolv
 
 /**
  * Config of ONE project (project) in orchestrator `orch`. If the root has a
- * `wt.config.ts`, take it from there (config-driven, M1+). Otherwise synthesize a parity
- * host-only config (`@apartx/wt/plugin-meteor`, no docker) so that start/new work in
- * tests with temporary orch directories and in single-repo without the file.
+ * `wt.config.ts`, take it from there: a listed project gets its entry merged over
+ * `defaults`; an unlisted one gets `defaults` alone (as if listed with `{}`), and is an
+ * error when `defaults.plugin` is unset. Without a `wt.config.ts` synthesize a host-only
+ * config (`@apartx/wt/plugin-meteor`, no docker) so that start/new work in tests with
+ * temporary orch directories.
  */
 export async function resolveProjectConfig(orch: string, project: string): Promise<ResolvedProjectConfig> {
-  if (existsSync(resolve(orch, "wt.config.ts"))) {
-    const cfg = await loadConfig(orch, basename(orch));
-    const pc = cfg.projects[project];
-    if (pc) return pc;
-    // M1: the config is additive — it declares/overrides the listed projects, while any
-    // project it does not list gets the same host-only fallback as when there is no config
-    // at all. A later milestone can tighten this to throw-on-undeclared once every
-    // workspace lists all of its projects.
+  if (!existsSync(resolve(orch, "wt.config.ts"))) return fallbackProjectConfig(project);
+  const cfg = await loadConfig(orch, basename(orch));
+  const pc = cfg.projects[project];
+  if (pc) return pc;
+  if (!cfg.defaults.plugin) {
+    throw new Error(`wt.config: project "${project}" is not listed and defaults.plugin is unset`);
   }
-  // Parity fallback: host-only meteor for unlisted projects / projects without a config.
-  return fallbackProjectConfig(project);
+  return deepMerge<ProjectConfig>(cfg.defaults, {}) as ResolvedProjectConfig;
 }
 
 /** projectsDir of the resolved workspace ("." for single-repo, otherwise "projects"); "projects" when there is no config. */
@@ -222,7 +224,7 @@ export async function resolveLinkSpecs(orch: string): Promise<string[]> {
   return (await loadConfig(orch, basename(orch))).links;
 }
 
-/** Parity config when `wt.config.ts` has no entry: host meteor, no docker. */
+/** Config when there is no `wt.config.ts` at all: host meteor, no docker. */
 function fallbackProjectConfig(_project: string): ResolvedProjectConfig {
   return { plugin: "@apartx/wt/plugin-meteor" };
 }

@@ -77,8 +77,10 @@ Exactly one of `project` / `projects` must be set, and `projectsDir` cannot be c
 | `links` | `string[]` | `[]` | Inter-service links, see [Links](#links). |
 
 **Unlisted projects.** A repository under `projectsDir` that is missing from `projects` is still
-a project (`wt projects`, `wt list`, `wt new` see it), but it does not get `defaults`: it runs
-with the built-in fallback, the Meteor plugin in host mode. List every project you run.
+a project (`wt projects`, `wt list`, `wt new` see it) and is configured by `defaults` alone, as if
+it were listed with an empty entry `{}`. If `defaults.plugin` is unset, commands that need its
+config (`wt new`, `wt start`, …) fail with `wt.config: project "<p>" is not listed and
+defaults.plugin is unset` — list the project or set `defaults.plugin`.
 
 ## `ProjectConfig`
 

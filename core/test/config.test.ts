@@ -106,15 +106,64 @@ test("a workspace wt.config.ts loads and validates", async () => {
   expect(cfg.projects.worker.plugin).toBe("@apartx/wt/plugin-node"); // own plugin wins
 });
 
-test("resolveProjectConfig: listed project from config, unlisted falls back to constants parity", async () => {
+test("resolveProjectConfig: listed project from config, unlisted gets defaults", async () => {
   // listed dockerized core project → from config
   const server = await resolveProjectConfig(workspace, "srv");
   expect(server.plugin).toBe("@apartx/wt/plugin-meteor");
   expect(server.docker?.image).toBe("meteor-dev:3.4");
-  // unlisted project → fallback (constants); host-meteor, no docker.
+  // unlisted project → defaults alone (here meteor), no docker.
   const unlisted = await resolveProjectConfig(workspace, "geoip");
   expect(unlisted.plugin).toBe("@apartx/wt/plugin-meteor");
   expect(unlisted.docker).toBeUndefined();
+});
+
+test("resolveProjectConfig: an unlisted project honours defaults (not the meteor fallback)", async () => {
+  const orch = mkdtempSync(resolve(tmpdir(), "wt-unlisted-defaults-"));
+  try {
+    writeFileSync(
+      resolve(orch, "wt.config.ts"),
+      `import { defineWorkspace } from "@apartx/wt";\n` +
+        `export default defineWorkspace({\n` +
+        `  defaults: { plugin: "@apartx/wt/plugin-node", docker: { image: "node:22" }, env: { A: "\${port}" } },\n` +
+        `  projects: { listed: {} },\n` +
+        `});\n`,
+    );
+    expect(await resolveProjectConfig(orch, "unlisted")).toEqual({
+      plugin: "@apartx/wt/plugin-node",
+      docker: { image: "node:22" },
+      env: { A: "${port}" },
+    });
+    // same as a listed project with an empty entry
+    expect(await resolveProjectConfig(orch, "unlisted")).toEqual(await resolveProjectConfig(orch, "listed"));
+  } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
+});
+
+test("resolveProjectConfig: an unlisted project without defaults.plugin is an error", async () => {
+  const orch = mkdtempSync(resolve(tmpdir(), "wt-unlisted-nodefaults-"));
+  try {
+    writeFileSync(
+      resolve(orch, "wt.config.ts"),
+      `import { defineWorkspace } from "@apartx/wt";\n` +
+        `export default defineWorkspace({ projects: { listed: { plugin: "@apartx/wt/plugin-node" } } });\n`,
+    );
+    await expect(resolveProjectConfig(orch, "unlisted")).rejects.toThrow(
+      'wt.config: project "unlisted" is not listed and defaults.plugin is unset',
+    );
+    expect((await resolveProjectConfig(orch, "listed")).plugin).toBe("@apartx/wt/plugin-node");
+  } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
+});
+
+test("resolveProjectConfig: without a wt.config.ts every project is host meteor", async () => {
+  const orch = mkdtempSync(resolve(tmpdir(), "wt-no-config-"));
+  try {
+    expect(await resolveProjectConfig(orch, "anything")).toEqual({ plugin: "@apartx/wt/plugin-meteor" });
+  } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
 });
 
 test("resolveDockerizedProjects returns only the docker-image projects", async () => {
