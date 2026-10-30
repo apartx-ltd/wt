@@ -164,10 +164,10 @@ export async function resolveProjectConfig(orch: string, project: string): Promi
     const cfg = await loadConfig(orch, basename(orch));
     const pc = cfg.projects[project];
     if (pc) return pc;
-    // M1: the config is additive — it declares/overrides the listed (dockerized core)
-    // projects, while all others (apartx-whatsapp/-spaces-host/…) keep the behavior from
-    // the constants through the same fallback as when there is no config. M2 will move all
-    // projects into the config and can tighten this to throw-on-undeclared.
+    // M1: the config is additive — it declares/overrides the listed projects, while any
+    // project it does not list gets the same host-only fallback as when there is no config
+    // at all. A later milestone can tighten this to throw-on-undeclared once every
+    // workspace lists all of its projects.
   }
   // Parity fallback: host-only meteor for unlisted projects / projects without a config.
   return fallbackProjectConfig(project);
@@ -190,7 +190,7 @@ export async function resolveServerProject(orch: string): Promise<string | null>
 /**
  * Names of all dockerized projects (with `docker.image`) from `<orch>/wt.config.ts` —
  * a stable index source for the base aux ports (deterministicAuxBasePort).
- * No config (tests / single-repo without the file) ⇒ []. No apartx specifics in the engine.
+ * No config (tests / single-repo without the file) ⇒ []. No workspace-specific names in the engine.
  */
 export async function resolveDockerizedProjects(orch: string): Promise<string[]> {
   if (!existsSync(resolve(orch, "wt.config.ts"))) return [];
@@ -215,7 +215,7 @@ export async function resolveCoreStack(orch: string): Promise<Array<[string, str
 
 /**
  * Inter-service link specs (`consumer:target:mechanism:key`) from `<orch>/wt.config.ts`.
- * No config (tests / single-repo without the file) ⇒ []. No apartx specifics in the engine.
+ * No config (tests / single-repo without the file) ⇒ []. No workspace-specific names in the engine.
  */
 export async function resolveLinkSpecs(orch: string): Promise<string[]> {
   if (!existsSync(resolve(orch, "wt.config.ts"))) return [];

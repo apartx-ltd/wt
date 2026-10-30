@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
  * Written after every install; `wt start` compares it with the current package files and
  * reinstalls if they diverged. Without it a non-empty volume was considered good forever:
  * merging develop / checking out another commit in a worktree does not touch dependencies, and the
- * instance silently ran on stale versions (svelte 5.56 in the cabinet brought back a triple `landlord-main-page`).
+ * instance silently ran on stale versions (a stale svelte 5.56 in one project brought back an already-fixed triple-render bug).
  */
 export const DEPS_STAMP = ".wt-deps-hash";
 

@@ -232,7 +232,7 @@ async function cmdLink() {
   if (json) return void console.log(JSON.stringify(outcomes));
   const matched = outcomes.filter((o) => o.status !== "skip-no-port");
   if (matched.length === 0) {
-    console.log(`link: ${project} has no configured/running upstreams in LINKS`);
+    console.log(`link: ${project} has no configured/running upstreams in \`links\``);
     return;
   }
   for (const o of outcomes) {
@@ -395,7 +395,7 @@ async function cmdReap() {
   console.log(removed ? `reap: removed all wtdev-* dev containers (${removed})` : "reap: no dev containers found");
 }
 
-const USAGE = `wt — multi-branch development in the ApartX orchestrator.
+const USAGE = `wt — multi-branch development with git worktrees: isolated worktrees, deterministic ports, per-worktree env, cross-service links, host or docker instances.
 
 (single-repo workspace: omit <project> — it is implied, e.g. \`wt new <slug>\`)
 
@@ -405,17 +405,17 @@ Commands (slug is optional: without it = the base checkout projects/<p>, slug "b
   start <p> [slug] [--link|--server [slug]]   run in the background (host: pidfile+log / dockerized: container)
   stop  <p> [slug] | --all                    stop an instance / all of them
   restart <p> [slug]                          stop + start
-  up                                          bring up the core set (server+cabinet+admin)
-  down                                        stop everything
+  up                                          start the core stack (projects with \`core\` in wt.config.ts)
+  down                                        stop every running instance
   ps    [--json]                              running instances
   list  [--json]                              existing worktrees
   logs  <p> [slug] [-f] | --all               logs of background instance(s)
-  link  <p> <slug> [slug]                     link to all worktree upstreams (the LINKS mesh)
+  link  <p> <slug> [slug]                     point the project at its upstreams' worktrees (\`links\` in wt.config.ts)
   unlink <p> <slug>                           restore settings.json/.env from the repository
   rm    <p> <slug> [--branch]                 remove a worktree (+ optionally its branch)
   reap                                        remove all wtdev-* dev containers
-  sweep [--apply] [--json]                    remove worktrees whose branches are merged in GitLab (without --apply = plan)
-  slim  [--apply] [--json]                    remove node_modules/.meteor/local/docker volumes in all stopped worktrees + orphan volumes (without --apply = plan)
+  sweep [--apply] [--json]                    remove worktrees whose branches are merged (GitLab merge requests via glab; without --apply = plan)
+  slim  [--apply] [--json]                    remove restorable artifacts (dependencies, build caches, docker volumes) in all stopped worktrees + orphan volumes (without --apply = plan)
   port  <p> [slug] [--json]                   print the allocated port
   projects [--json]                           list projects
   ui                                          full-screen TUI dashboard

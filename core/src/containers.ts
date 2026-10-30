@@ -1,4 +1,4 @@
-/** Dev container name. The wtdev- prefix does not clash with the apartx-* compose names. */
+/** Dev container name. The wtdev- prefix keeps wt's containers apart from the workspace's own compose services. */
 export const containerName = (p: string, slug: string): string => `wtdev-${p}-${slug}`;
 
 export interface DockerResult {
