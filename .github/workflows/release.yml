@@ -31,9 +31,11 @@ jobs:
       - name: Update npm
         run: npm install -g npm@11
 
+      # jq, not `bun -p`: before `bun install` bun has no node_modules, auto-installs the
+      # bunfig.toml preload (@opentui/solid) with unpinned transitive versions, and crashes.
       - name: Tag matches package.json version
         run: |
-          version="v$(bun -p 'require("./package.json").version')"
+          version="v$(jq -r .version package.json)"
           if [ "$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
             exit 1
@@ -59,8 +61,8 @@ jobs:
       # was published by hand) green instead of failing on "cannot publish over" from npm.
       - name: Publish to npm
         run: |
-          name="$(bun -p 'require("./package.json").name')"
-          version="$(bun -p 'require("./package.json").version')"
+          name="$(jq -r .name package.json)"
+          version="$(jq -r .version package.json)"
           if [ -n "$(npm view "$name@$version" version 2>/dev/null)" ]; then
             echo "::notice::$name@$version is already on npm, skipping publish"
             exit 0
