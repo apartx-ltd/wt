@@ -29,6 +29,23 @@ test("childEnv drops PORT so the daemon's port can't leak into a spawned wt", ()
   expect(env.HOME).toBe("/home/x");
 });
 
+test("childEnv hands the server's workspace root to the spawned CLI as WT_ORCH", () => {
+  const env = childEnv({ PORT: "1", X: "y" }, "/ws");
+  expect(env.PORT).toBeUndefined();
+  expect(env.X).toBe("y");
+  expect(env.WT_ORCH).toBe("/ws");
+});
+
+test("runWt and spawnWtLines pass opts.orch to the child as WT_ORCH", async () => {
+  // /usr/bin/env as the "CLI" prints the environment the child actually received.
+  const r = await runWt([], { wtBin: "/usr/bin/env", orch: "/some/ws" });
+  expect(r.stdout.split("\n")).toContain("WT_ORCH=/some/ws");
+  const proc = spawnWtLines([], { wtBin: "/usr/bin/env", orch: "/other/ws" });
+  const lines: string[] = [];
+  for await (const line of streamLines(proc.stdout as ReadableStream<Uint8Array>)) lines.push(line);
+  expect(lines).toContain("WT_ORCH=/other/ws");
+});
+
 test("childEnv does not mutate the input env", () => {
   const base = { PORT: "4499", FOO: "bar" };
   childEnv(base);

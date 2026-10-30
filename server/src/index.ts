@@ -7,8 +7,8 @@ import { instancesChanged } from "./poller";
 export interface ServerOpts extends WtOpts {
   port?: number;
   pollMs?: number;
-  /** Orchestrator root for core reads. Default: resolveOrch() (WT_ORCH env / wt.config.ts upward from cwd). */
-  orch?: string;
+  // `orch` (from WtOpts): workspace root for core reads AND every spawned CLI.
+  // Default: resolveOrch() once at createServer (WT_ORCH env / wt.config.ts upward from cwd).
   /** Test seams — override the read providers; default to direct `@wt/core` calls. */
   readWorktrees?: () => Promise<Worktree[]>;
   readRunning?: () => Promise<RunInstance[]>;
@@ -19,8 +19,7 @@ export interface ServerOpts extends WtOpts {
 }
 
 /** Resolve the read providers, defaulting to direct core reads against `orch`. */
-function readers(opts: ServerOpts) {
-  const orch = opts.orch ?? resolveOrch();
+function readers(opts: ServerOpts, orch: string) {
   const readWorktrees = opts.readWorktrees ?? (() => listWorktrees(orch));
   const readRunning = opts.readRunning ?? (() => listRunningInstances(orch));
   const readBases = opts.readBases ?? (async (): Promise<BaseSpec[]> => {
@@ -54,9 +53,13 @@ function sse(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-export function createServer(opts: ServerOpts = {}) {
+export function createServer(serverOpts: ServerOpts = {}) {
+  // Resolve the workspace once; `opts` (with orch) is what every runWt/spawnWt* call
+  // below receives, so the spawned CLI gets the same root as WT_ORCH.
+  const orch = serverOpts.orch ?? resolveOrch();
+  const opts: ServerOpts = { ...serverOpts, orch };
   const pollMs = opts.pollMs ?? 1500;
-  const { snapshot, readProjects, readTitle } = readers(opts);
+  const { snapshot, readProjects, readTitle } = readers(opts, orch);
 
   return Bun.serve({
     port: opts.port ?? 4499,

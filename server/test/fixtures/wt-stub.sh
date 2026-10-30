@@ -10,6 +10,9 @@ case "$1 ${2:-}" in
     echo "wt: started $2 ${3:-}" ;;
   "stop "*)
     echo "wt: stopped $2 ${3:-}" ;;
+  "logs wt-orch")
+    # echo the workspace root the server handed down (WT_ORCH) as a log line
+    echo "WT_ORCH=${WT_ORCH:-}" ;;
   "logs "*)
     # emit two log lines then exit (stub ignores -f and does not block)
     echo "=> App running"

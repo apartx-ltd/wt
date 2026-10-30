@@ -6,6 +6,12 @@ export interface WtOpts {
   wtBin?: string;
   /** Working directory (orchestrator root). */
   cwd?: string;
+  /**
+   * Workspace root the spawned CLI must drive, passed as `WT_ORCH` — so a server started
+   * from another cwd (or with an explicit root) never acts on a different workspace than
+   * the one it reads. Default: the CLI resolves it itself (WT_ORCH env / upward from cwd).
+   */
+  orch?: string;
 }
 
 /** Spawn-array prefix for the wt CLI: the package's own `cli/bin/wt.ts` run by the current bun. */
@@ -21,12 +27,15 @@ export function resolveBin(opts: WtOpts): string[] {
  * `PORT`, so a host-process instance (apartx-spaces/pdf/images/…) would try to bind the
  * server's port instead of its worktree/base `.env` PORT — "Can't listen on port 4499".
  * Dockerized instances set container env explicitly, which is why only host procs broke.
+ * With `orch`, the child also gets `WT_ORCH=<orch>` (see `WtOpts.orch`).
  */
 export function childEnv(
   base: Record<string, string | undefined> = process.env,
+  orch?: string,
 ): Record<string, string | undefined> {
   const env = { ...base };
   delete env.PORT;
+  if (orch) env.WT_ORCH = orch;
   return env;
 }
 
@@ -44,7 +53,7 @@ export async function runWt(
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const proc = Bun.spawn([...resolveBin(opts), ...args], {
     cwd: opts.cwd,
-    env: childEnv(),
+    env: childEnv(process.env, opts.orch),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -65,7 +74,7 @@ export async function runWt(
 export function spawnWtDetached(args: string[], opts: WtOpts = {}): void {
   Bun.spawn([...resolveBin(opts), ...args], {
     cwd: opts.cwd,
-    env: childEnv(),
+    env: childEnv(process.env, opts.orch),
     stdin: "ignore",
     stdout: "ignore",
     stderr: "ignore",
@@ -76,7 +85,7 @@ export function spawnWtDetached(args: string[], opts: WtOpts = {}): void {
 export function spawnWtLines(args: string[], opts: WtOpts = {}): Bun.Subprocess {
   return Bun.spawn([...resolveBin(opts), ...args], {
     cwd: opts.cwd,
-    env: childEnv(),
+    env: childEnv(process.env, opts.orch),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

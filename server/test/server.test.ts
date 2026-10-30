@@ -130,6 +130,22 @@ test("GET .../logs streams log lines as SSE", async () => {
   expect(text).toContain("mongo connected");
 });
 
+test("the spawned wt CLI gets the server's workspace root as WT_ORCH", async () => {
+  // Stub echoes $WT_ORCH for `logs wt-orch …`; the server's orch is ORCH, not the test's cwd.
+  const res = await fetch(`http://localhost:${server.port}/api/instances/wt-orch/x/logs`);
+  const expected = `data: ${JSON.stringify(`WT_ORCH=${ORCH}`)}`;
+  let text = "";
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  for (let i = 0; i < 50; i++) {
+    const { value, done } = await reader.read();
+    if (value) text += dec.decode(value);
+    if (done || text.includes("WT_ORCH=")) break;
+  }
+  await reader.cancel();
+  expect(text).toContain(expected);
+});
+
 test("unknown action method → 405", async () => {
   const res = await fetch(`http://localhost:${server.port}/api/instances/p/s/stop`);
   expect(res.status).toBe(405);
