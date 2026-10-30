@@ -2,7 +2,7 @@ import { test, expect, describe, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { baseCheckoutDockerEnv, buildDockerRunArgs, buildHostDevArgs, buildHostMeteorArgs, remapEnvLine, remapSettingsHosts, renderEnvFile, shInherit, spawnDetached, type StartOptions } from "../src/start";
+import { baseCheckoutDockerEnv, buildDockerRunArgs, devHost, buildHostDevArgs, buildHostMeteorArgs, remapEnvLine, remapSettingsHosts, renderEnvFile, shInherit, spawnDetached, type StartOptions } from "../src/start";
 import { BASE_SLUG } from "../src/new-worktree";
 import type { StackPlugin } from "../src/plugin";
 import type { ResolvedProjectConfig } from "../src/config";
@@ -419,4 +419,10 @@ test("shInherit: a hint for a different code is not mixed in", async () => {
     (e: Error) => e,
   );
   expect(err!.message).not.toContain("must not appear");
+});
+
+test("devHost returns null instead of throwing when the lookup binary is missing (scutil on Linux)", async () => {
+  // Bun resolves spawn binaries against the PATH it started with, so the missing `scutil`
+  // is simulated through the argv seam rather than by clearing PATH.
+  expect(await devHost(["wt-test-no-such-binary", "--get", "LocalHostName"])).toBeNull();
 });

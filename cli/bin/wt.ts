@@ -82,12 +82,13 @@ async function cmdPort() {
   let port: number | null;
   if (slug === BASE_SLUG) {
     port = await resolveBasePort(projectDir(orch, project!, projectsDir));
+    if (port === null) die(`${project}: no PORT found in .env/package.json (cannot compute the port)`);
   } else {
     port = await readWorktreePort(worktreeDir(orch, project!, slug));
     if (port === null) die(`no .env.worktree for ${project}/${slug}`);
   }
   if (json) console.log(JSON.stringify({ project, slug, port }));
-  else console.log(port ?? "");
+  else console.log(port);
 }
 
 async function cmdProjects() {

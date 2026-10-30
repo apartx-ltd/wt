@@ -188,8 +188,9 @@ depend on it: `web/build` ships prebuilt in the tarball (`prepack` runs `build:w
 - **`wt sweep` is GitLab-only.** It checks merge requests on gitlab.com through the `glab` CLI;
   GitHub pull requests are not supported yet.
 - **Docker mode is macOS-only for now.** A container reaches services on the host by the
-  machine's mDNS name (`<LocalHostName>.local`), which `wt` reads with macOS's `scutil`; docker
-  mode on Linux is untested and not expected to work yet. Replacing a dashboard daemon finds the
+  machine's mDNS name (`<LocalHostName>.local`), which `wt` reads with macOS's `scutil`; without
+  `scutil` it falls back to `host.docker.internal`, but docker mode on Linux is untested and not
+  expected to work yet. Replacing a dashboard daemon finds the
   process on the port with `lsof`.
 - **No third-party plugins yet.** The plugin registry knows only the bundled plugins; loading a
   plugin from another package is planned.

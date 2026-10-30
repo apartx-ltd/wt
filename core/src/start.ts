@@ -217,12 +217,20 @@ export function spawnDetached(cmd: string, args: string[], cwd: string, logPath:
   return child.pid;
 }
 
-/** mDNS name of the dev machine (<LocalHostName>.local); null on non-mac. Parity with dev_host. */
-export async function devHost(): Promise<string | null> {
-  const proc = Bun.spawn(["scutil", "--get", "LocalHostName"], { stdout: "pipe", stderr: "ignore" });
-  const out = (await new Response(proc.stdout).text()).trim();
-  await proc.exited;
-  return out ? `${out}.local` : null;
+/**
+ * mDNS name of the dev machine (<LocalHostName>.local); null on non-mac — `scutil` is missing
+ * there and the spawn throws ENOENT, so docker mode falls back to host.docker.internal.
+ * `argv` is a test seam. Parity with dev_host.
+ */
+export async function devHost(argv = ["scutil", "--get", "LocalHostName"]): Promise<string | null> {
+  try {
+    const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "ignore" });
+    const out = (await new Response(proc.stdout).text()).trim();
+    await proc.exited;
+    return out ? `${out}.local` : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
