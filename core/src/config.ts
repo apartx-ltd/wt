@@ -145,7 +145,7 @@ export function validateConfig(config: WorkspaceConfig, repoName = "app"): Resol
  */
 export async function loadConfig(orch: string, repoName = "app"): Promise<ResolvedConfig> {
   const path = resolve(orch, "wt.config.ts");
-  registerSelfResolver(); // `import … from "@apartx/wt"` в конфиге — без node_modules у потребителя
+  registerSelfResolver(); // lets the config `import … from "@apartx/wt"` without the consumer having node_modules
   const mod = await import(path).catch((e) => {
     throw new Error(`wt.config: не удалось загрузить ${path}: ${(e as Error).message}`);
   });

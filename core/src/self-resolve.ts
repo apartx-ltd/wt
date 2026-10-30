@@ -5,36 +5,48 @@ import { packageRoot } from "./orch";
 let registered = false;
 
 /**
- * Установленный глобально wt грузит `wt.config.ts` потребителя, у которого нет `node_modules`:
- * голый `import … from "@apartx/wt"` там не резолвится. Регистрирует в рантайме Bun
- * виртуальные модули `@apartx/wt` и его подпути — по карте `exports` корневого
- * `package.json` (читается на лету, резолвер не расходится с `exports`); каждый отдаёт
- * namespace настоящего файла пакета (тот же инстанс модуля, грузится лениво при первом
- * импорте). Перекрывает и `@apartx/wt` из `node_modules` потребителя — конфиг видит ту
- * версию wt, что его исполняет. Неизвестный подпуть — штатное «Cannot find module».
+ * A globally installed wt loads the consumer's `wt.config.ts`, and that workspace has no
+ * `node_modules`, so a bare `import … from "@apartx/wt"` there does not resolve. This registers
+ * Bun runtime virtual modules for `@apartx/wt` and its subpaths from the `exports` map of the
+ * root `package.json` (read at runtime, so the resolver cannot drift from `exports`). Each one
+ * exposes the namespace of the package's real file: the same module instance, loaded lazily on
+ * first import. It also overrides an `@apartx/wt` in the consumer's `node_modules`, so the
+ * config sees the wt version that executes it. An unknown subpath gets Bun's standard
+ * "Cannot find module" error.
  *
- * Именно `build.module`, а не `build.onResolve`: в Bun 1.3 runtime-`onResolve` не
- * вызывается для голых спецификаторов, которых нет в `node_modules`.
- * Идемпотентно: регистрируется один раз на процесс.
+ * It uses `build.module`, not `build.onResolve`, because in Bun 1.3 a runtime `onResolve` hook
+ * is not called for bare specifiers that are missing from `node_modules`.
+ * Idempotent: registers once per process.
  */
 export function registerSelfResolver(root = packageRoot()): void {
   if (registered) return;
   const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")) as {
     name: string;
-    exports: Record<string, string>;
+    exports: Record<string, unknown>;
   };
+  const entries = Object.entries(pkg.exports).map(([subpath, file]) => {
+    if (typeof file !== "string") {
+      throw new Error(`wt: unsupported exports entry "${subpath}" in ${resolve(root, "package.json")} (only string targets are supported)`);
+    }
+    return [pkg.name + subpath.slice(1), resolve(root, file)] as const;
+  });
   Bun.plugin({
     name: "@apartx/wt self-resolve",
     setup(build) {
-      for (const [subpath, file] of Object.entries(pkg.exports)) {
-        const target = resolve(root, file);
-        build.module(pkg.name + subpath.slice(1), () => ({
-          // JSON через require — сам объект; у модуля-объекта он становится default-экспортом.
-          exports: target.endsWith(".json") ? { default: require(target) } : require(target),
-          loader: "object",
-        }));
+      for (const [specifier, target] of entries) {
+        build.module(specifier, () => ({ exports: moduleExports(target), loader: "object" }));
       }
     },
   });
   registered = true;
+}
+
+/**
+ * Exports of a package file for an object-loader virtual module. An ESM namespace is passed as
+ * is (real named exports and `default`, if any). A JSON file mirrors a native JSON import: the
+ * whole object as `default`, plus its top-level keys as named exports.
+ */
+function moduleExports(target: string): Record<string, unknown> {
+  const mod = require(target);
+  return target.endsWith(".json") ? { ...mod, default: mod } : mod;
 }

@@ -1,6 +1,6 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { resolve } from "node:path";
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { loadConfig } from "../src/config";
 import { registerSelfResolver } from "../src/self-resolve";
@@ -33,17 +33,40 @@ test("loadConfig resolves `@apartx/wt` in a consumer wt.config.ts without node_m
 
 test("registerSelfResolver maps `@apartx/wt/plugin-meteor` to the package's meteor plugin", async () => {
   registerSelfResolver();
-  registerSelfResolver(); // idempotent
+  expect(() => registerSelfResolver()).not.toThrow(); // idempotent: a repeat call is a no-op
   const mod = await import(resolve(workspace, "meteor.ts"));
   expect(mod.meteorPlugin).toBeDefined();
   expect(mod.meteorPlugin).toBe((await import("../../plugins/meteor/src/index")).meteorPlugin);
 });
 
-test("`@apartx/wt/config-schema` resolves to the JSON schema as its default export", async () => {
+test("`@apartx/wt/config-schema` resolves like a native JSON import (default + named keys)", async () => {
   registerSelfResolver();
-  writeFileSync(resolve(workspace, "schema.ts"), `export { default } from "@apartx/wt/config-schema";\n`);
+  writeFileSync(
+    resolve(workspace, "schema.ts"),
+    `export { default, $schema } from "@apartx/wt/config-schema";\n`,
+  );
   const mod = await import(resolve(workspace, "schema.ts"));
   expect(mod.default.$schema).toBeString();
+  expect(mod.$schema).toBe(mod.default.$schema);
+});
+
+test("the self-resolver wins over an `@apartx/wt` in the consumer's node_modules", async () => {
+  const consumer = mkdtempSync(resolve(tmpdir(), "wt-self-resolve-nm-"));
+  try {
+    const fake = resolve(consumer, "node_modules/@apartx/wt");
+    mkdirSync(fake, { recursive: true });
+    writeFileSync(resolve(fake, "package.json"), JSON.stringify({ name: "@apartx/wt", type: "module", exports: { ".": "./index.ts" } }));
+    writeFileSync(resolve(fake, "index.ts"), `export const defineWorkspace = () => "FAKE";\n`);
+    writeFileSync(
+      resolve(consumer, "wt.config.ts"),
+      `import { defineWorkspace } from "@apartx/wt";\n` +
+        `export default defineWorkspace({ projectsDir: "projects", defaults: { plugin: "@apartx/wt/plugin-node" }, projects: { app: {} } });\n`,
+    );
+    const cfg = await loadConfig(consumer, "x");
+    expect(cfg.projects.app.plugin).toBe("@apartx/wt/plugin-node");
+  } finally {
+    rmSync(consumer, { recursive: true, force: true });
+  }
 });
 
 test("an unknown `@apartx/wt/…` subpath fails to resolve", async () => {
