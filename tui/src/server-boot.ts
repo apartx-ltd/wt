@@ -1,4 +1,6 @@
-import { WT_PROTOCOL_VERSION } from "#shared";
+import { existsSync, realpathSync } from "node:fs";
+import { resolve } from "node:path";
+import { WT_PROTOCOL_VERSION, type WtMeta } from "#shared";
 
 /** GET /api/health → its `version`, or null if absent/unreachable/malformed. */
 export async function fetchServerVersion(baseUrl: string): Promise<number | null> {
@@ -59,21 +61,59 @@ export async function killPort(port: number): Promise<void> {
   }
 }
 
-function spawnServer(port: number, serverEntry: string, staticDir?: string): import("bun").Subprocess {
-  return Bun.spawn(["bun", serverEntry], {
-    // WT_STATIC_DIR → the server also serves the built web dashboard (see ServerOpts.staticDir).
-    env: { ...process.env, PORT: String(port), ...(staticDir ? { WT_STATIC_DIR: staticDir } : {}) },
+export interface SpawnOpts {
+  port: number;
+  serverEntry: string;
+  /** Workspace root the daemon drives — passed as WT_ORCH, so it never falls back to its cwd. */
+  orch: string;
+  /** Built web dashboard the daemon also serves (WT_STATIC_DIR, see ServerOpts.staticDir). */
+  staticDir?: string;
+}
+
+function spawnServer(o: SpawnOpts): import("bun").Subprocess {
+  return Bun.spawn([process.execPath, o.serverEntry], {
+    env: {
+      ...process.env,
+      PORT: String(o.port),
+      WT_ORCH: o.orch,
+      ...(o.staticDir ? { WT_STATIC_DIR: o.staticDir } : {}),
+    },
     stdin: "ignore",
     stdout: "ignore",
     stderr: "ignore",
   });
 }
 
+/** GET /api/meta, or null if unreachable/malformed. `orch` is absent on pre-binding builds. */
+export async function fetchServerMeta(baseUrl: string): Promise<Partial<WtMeta> | null> {
+  try {
+    const r = await fetch(`${baseUrl}/api/meta`);
+    if (!r.ok) return null;
+    const body = (await r.json()) as unknown;
+    return body && typeof body === "object" ? (body as Partial<WtMeta>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** HTTP status of GET / (the static dashboard shell), or null if unreachable. */
+export async function fetchRootStatus(baseUrl: string): Promise<number | null> {
+  try {
+    const r = await fetch(`${baseUrl}/`);
+    await r.body?.cancel();
+    return r.status;
+  } catch {
+    return null;
+  }
+}
+
 export interface BootDeps {
   fetchVersion?: (baseUrl: string) => Promise<number | null>;
+  fetchMeta?: (baseUrl: string) => Promise<Partial<WtMeta> | null>;
+  fetchRootStatus?: (baseUrl: string) => Promise<number | null>;
   isWtServer?: (baseUrl: string) => Promise<boolean>;
   killPort?: (port: number) => Promise<void>;
-  spawnServer?: (port: number, serverEntry: string, staticDir?: string) => import("bun").Subprocess | undefined;
+  spawnServer?: (o: SpawnOpts) => import("bun").Subprocess | undefined;
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -84,39 +124,55 @@ export interface BootResult {
 }
 
 /**
- * Ensure a *current* wt-server is listening on `port` and return its baseUrl.
+ * Ensure a *current* wt-server for `orch` is listening on `port` and return its baseUrl.
  *
- * Reuses an existing server only if GET /api/health matches WT_PROTOCOL_VERSION.
- * If an older/incompatible wt-server holds the port, it is killed and replaced —
- * otherwise a stale build silently lingers and newer routes (e.g. /logs) 404,
- * which is precisely how the log pane broke after P2 added the logs route.
+ * Reuses an existing server only if GET /api/health matches WT_PROTOCOL_VERSION, its
+ * /api/meta reports the same workspace root, and — when a built `staticDir` is requested
+ * — it serves the dashboard at `/`. Otherwise it is killed and replaced: a stale build
+ * silently lingering makes newer routes (e.g. /logs) 404 — precisely how the log pane
+ * broke after P2 added the logs route — a daemon bound to another workspace would drive
+ * the wrong worktrees, and one started without WT_STATIC_DIR would 404 the `wt web` shell.
  */
-export async function ensureServer(
-  opts: { port: number; serverEntry: string; staticDir?: string },
-  deps: BootDeps = {},
-): Promise<BootResult> {
+export async function ensureServer(opts: SpawnOpts, deps: BootDeps = {}): Promise<BootResult> {
   const fv = deps.fetchVersion ?? fetchServerVersion;
+  const fetchMeta = deps.fetchMeta ?? fetchServerMeta;
+  const rootStatus = deps.fetchRootStatus ?? fetchRootStatus;
   const isWt = deps.isWtServer ?? isWtServer;
   const kill = deps.killPort ?? killPort;
   const spawn = deps.spawnServer ?? spawnServer;
   const sleep = deps.sleep ?? ((ms: number) => Bun.sleep(ms));
   const baseUrl = `http://localhost:${opts.port}`;
 
-  if ((await fv(baseUrl)) === WT_PROTOCOL_VERSION) {
-    return { baseUrl, replaced: false }; // current server already up — reuse it
-  }
+  const isReusable = async (): Promise<boolean> => {
+    const meta = await fetchMeta(baseUrl);
+    if (typeof meta?.orch !== "string" || canonical(meta.orch) !== canonical(opts.orch)) return false;
+    const wantsStatic = !!opts.staticDir && existsSync(resolve(opts.staticDir, "index.html"));
+    return !(wantsStatic && (await rootStatus(baseUrl)) === 404);
+  };
 
-  // Not current. If an older wt-server holds the port, replace it.
   let replaced = false;
-  if (await isWt(baseUrl)) {
-    await kill(opts.port); // waits until the port is actually free
+  if ((await fv(baseUrl)) === WT_PROTOCOL_VERSION) {
+    if (await isReusable()) return { baseUrl, replaced }; // the right server is already up
+    await kill(opts.port); // current protocol, wrong workspace or no static dir
+    replaced = true;
+  } else if (await isWt(baseUrl)) {
+    await kill(opts.port); // an older wt-server holds the port; waits until it is free
     replaced = true;
   }
 
-  const spawned = spawn(opts.port, opts.serverEntry, opts.staticDir);
+  const spawned = spawn(opts);
   for (let i = 0; i < 50; i++) {
     if ((await fv(baseUrl)) === WT_PROTOCOL_VERSION) return { baseUrl, spawned, replaced };
     await sleep(100);
   }
   throw new Error("wt-server did not come up");
+}
+
+/** Real path when it exists (the server reports its WT_ORCH canonicalized), else as given. */
+function canonical(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return resolve(path);
+  }
 }

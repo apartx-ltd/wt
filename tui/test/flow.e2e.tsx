@@ -28,6 +28,7 @@ const insts: MergedInstance[] = [
 ];
 const stub: any = {
   listInstances: async () => insts,
+  getMeta: async () => ({ title: "test", orch: "/w" }),
   subscribe: () => () => {},
   streamLogs: () => () => {},
   start: async (p: string, s: string) => ((calls.start = { p, s }), { ok: true }),

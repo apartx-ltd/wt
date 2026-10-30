@@ -40,3 +40,18 @@ for (const args of [["help"], ["--version"], []]) {
     }
   });
 }
+
+// ui/web bind their wt-server to the workspace (WT_ORCH), so they resolve it first:
+// outside any workspace they fail with the standard error instead of starting anything.
+for (const cmd of ["ui", "web"]) {
+  test(`wt ${cmd} outside any workspace exits 1 with the standard error`, async () => {
+    const dir = mkdtempSync(resolve(tmpdir(), "wt-no-ws-"));
+    try {
+      const { stderr, code } = await wtIn(dir, cmd);
+      expect(code).toBe(1);
+      expect(stderr.startsWith("wt: no wt.config.ts found")).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}

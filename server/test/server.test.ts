@@ -183,18 +183,18 @@ test("DELETE /api/worktrees/:p/:slug returns exit code", async () => {
   expect(await res.json()).toEqual({ code: 0 });
 });
 
-test("GET /api/meta returns the injected title", async () => {
+test("GET /api/meta returns the injected title and the workspace root", async () => {
   const s = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...READERS, readTitle: async () => "My Workspace" });
   const res = await fetch(`http://localhost:${s.port}/api/meta`);
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ title: "My Workspace" });
+  expect(await res.json()).toEqual({ title: "My Workspace", orch: ORCH });
   s.stop(true);
 });
 
 test("GET /api/meta returns null title when unset", async () => {
   const s = createServer({ wtBin: STUB, orch: ORCH, port: 0, pollMs: 50, ...READERS, readTitle: async () => null });
   const res = await fetch(`http://localhost:${s.port}/api/meta`);
-  expect(await res.json()).toEqual({ title: null });
+  expect(await res.json()).toEqual({ title: null, orch: ORCH });
   s.stop(true);
 });
 

@@ -10,3 +10,9 @@ export function resolveProjectArg(
   if (ctx.singleRepo) return { project: ctx.soleProject, pos: positional };
   return { project: positional[0], pos: positional.slice(1) };
 }
+
+/** `wt web [--dev]`: `--dev` runs the vite dev server instead of the built static dashboard. */
+export function parseWebArgs(args: string[]): { dev: boolean } {
+  if (args.some((a) => a !== "--dev")) throw new Error("usage: wt web [--dev]");
+  return { dev: args.includes("--dev") };
+}

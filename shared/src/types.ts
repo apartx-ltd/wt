@@ -68,4 +68,9 @@ export type WtEvent =
 export interface WtMeta {
   /** config.title; null если не задан в wt.config. */
   title: string | null;
+  /**
+   * Workspace root this server drives (its resolved WT_ORCH). Lets a launcher tell
+   * whether a daemon already on the port serves the same workspace before reusing it.
+   */
+  orch: string;
 }

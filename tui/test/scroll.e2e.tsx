@@ -34,7 +34,7 @@ insts.push({ project: "p", slug: "base", branch: "main", port: 4000, status: "do
 
 const stub: any = {
   listInstances: async () => insts,
-  getMeta: async () => ({ title: "test" }),
+  getMeta: async () => ({ title: "test", orch: "/w" }),
   subscribe: () => () => {},
   streamLogs: () => () => {},
 };

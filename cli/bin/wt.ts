@@ -35,7 +35,8 @@ import {
 import { registerBundledPlugins } from "#plugins";
 import { existsSync } from "node:fs";
 import { col, fmtUptime, stopLine } from "../src/format";
-import { resolveProjectArg } from "../src/args";
+import { resolveProjectArg, parseWebArgs } from "../src/args";
+import { runTui, runWeb } from "../src/dashboards";
 import pkg from "../../package.json";
 
 // Регистрируем бандл-плагины один раз при старте процесса: start/new резолвят плагин
@@ -417,10 +418,18 @@ const USAGE = `wt — управление много-веточной разр�
   slim  [--apply] [--json]                    снести node_modules/.meteor/local/docker-тома во всех остановленных worktree + тома-сироты (без --apply = план)
   port  <p> [slug] [--json]                   напечатать выданный порт
   projects [--json]                           список проектов
-  ui                                          полноэкранный TUI-дашборд (нужен bun)
-  web                                         web-дашборд SvelteKit+apartx-ui (нужен bun)
+  ui                                          full-screen TUI dashboard
+  web [--dev]                                 web dashboard (built static; --dev runs vite dev)
   version | --version                         версия wt
 `;
+
+async function cmdUi() {
+  process.exit(await runTui(args, { orch }));
+}
+
+async function cmdWeb() {
+  process.exit(await runWeb({ ...parseWebArgs(args), orch }));
+}
 
 async function cmdHelp() {
   process.stdout.write(USAGE);
@@ -445,6 +454,8 @@ const table: Record<string, () => Promise<void>> = {
   rm: cmdRm,
   link: cmdLink,
   unlink: cmdUnlink,
+  ui: cmdUi,
+  web: cmdWeb,
   help: cmdHelp,
   "--help": cmdHelp,
   "-h": cmdHelp,

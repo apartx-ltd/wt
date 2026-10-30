@@ -1,4 +1,4 @@
-import { mergeInstances, WT_PROTOCOL_VERSION, type MergedInstance, type Worktree, type RunInstance, type BaseSpec } from "#shared";
+import { mergeInstances, WT_PROTOCOL_VERSION, type WtMeta, type MergedInstance, type Worktree, type RunInstance, type BaseSpec } from "#shared";
 import { resolveOrch, listWorktrees, listRunningInstances, listProjects, loadConfig, resolveProjectsDir, projectDir, resolveBasePort, gitBranch } from "#core";
 import { stat } from "node:fs/promises";
 import { basename, resolve, sep } from "node:path";
@@ -109,9 +109,11 @@ export function createServer(serverOpts: ServerOpts = {}) {
         return Response.json({ version: WT_PROTOCOL_VERSION });
       }
 
-      // Workspace metadata (configurable title) → frontends render `wt · <title>`.
+      // Workspace metadata: the configurable title (frontends render `wt · <title>`) and
+      // the workspace root, which ensureServer checks before reusing this daemon.
       if (url.pathname === "/api/meta") {
-        return Response.json({ title: await readTitle() });
+        const meta: WtMeta = { title: await readTitle(), orch };
+        return Response.json(meta);
       }
 
       if (url.pathname === "/api/instances") {
