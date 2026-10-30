@@ -1,0 +1,59 @@
+// core/test/parity.test.ts
+import { test, expect, beforeAll } from "bun:test";
+import { registerBundledPlugins } from "@wt/plugins";
+import { loadPlugin } from "../src/plugin";
+import { generateEnvWorktree } from "../src/env-worktree";
+
+beforeAll(() => registerBundledPlugins());
+
+const HEADER = "# СГЕНЕРИРОВАНО scripts/worktree-env.sh — НЕ редактировать вручную";
+const ctx = (over: any = {}) => ({
+  orch: "/o", project: "apartx-server", slug: "feat-x", branch: "feature/x",
+  projectDir: "/o/projects/apartx-server", worktreeDir: "/o/worktrees/apartx-server/feat-x",
+  config: { plugin: "@wt/plugin-meteor", docker: { image: "meteor-dev:3.4" } },
+  port: 4020, offset: 20, container: "wtdev-apartx-server-feat-x",
+  mode: "docker", extraPorts: { hmr: 8105 }, ...over,
+});
+
+test("PARITY (integration): plugin envLines → generateEnvWorktree reproduces the byte-identical .env.worktree", async () => {
+  const p = await loadPlugin("@wt/plugin-meteor");
+  const out = generateEnvWorktree({
+    project: "apartx-server", branch: "feature/x", offset: 20,
+    basePort: 4000, baseRootUrl: "http://build.apartx.kz:4000",
+    extraEnvLines: p.envLines!(ctx() as any),
+    tailLines: p.worktreeEnvTail!(ctx() as any),
+  });
+  expect(out).toBe(
+    `${HEADER}\n# project=apartx-server  branch=feature/x  offset=20\n` +
+      `PORT=4020\nRSPACK_DEVSERVER_PORT=8105\nHMR_PUBLIC_PORT=8105\n` +
+      `ROOT_URL=http://build.apartx.kz:4020\nMONGO_OPLOG_URL=\nMONTI_APP_ID=\nMONTI_APP_SECRET=\n`,
+  );
+});
+
+test("PARITY: docker mounts + owned volumes match the legacy -v block", async () => {
+  const d = (await loadPlugin("@wt/plugin-meteor")).docker!(ctx() as any);
+  expect(d.mounts).toEqual([
+    "/o/worktrees/apartx-server/feat-x:/opt/app",
+    "wtdev-apartx-server-feat-x-node_modules:/opt/app/node_modules",
+    "wtdev-apartx-server-feat-x-meteor_local:/opt/app/.meteor/local",
+    "meteor_base:/root",
+  ]);
+  expect(d.ownedVolumes).toEqual([
+    "wtdev-apartx-server-feat-x-node_modules",
+    "wtdev-apartx-server-feat-x-meteor_local",
+  ]);
+});
+
+test("PARITY: meteor inner dev command — docker literal port, host $PORT", async () => {
+  const p = await loadPlugin("@wt/plugin-meteor");
+  expect(p.devCommand(ctx() as any).argv).toEqual(["meteor", "run", "--port", "4020"]);
+  expect(p.devCommand(ctx({ mode: "host" }) as any).argv).toEqual(["meteor", "run", "--port", "$PORT"]);
+});
+
+test("PARITY: env lines, install, isolated-db", async () => {
+  const p = await loadPlugin("@wt/plugin-meteor");
+  expect(p.envLines!(ctx() as any)).toEqual(["RSPACK_DEVSERVER_PORT=8105", "HMR_PUBLIC_PORT=8105"]);
+  expect(p.install(ctx() as any).argv).toEqual(["meteor", "npm", "install"]);
+  expect(p.isolatedDb!.urlEnvKey).toBe("MONGO_URL");
+  expect(p.isolatedDb!.deriveUrl("mongodb://h:27017/apartx", "x")).toBe("mongodb://h:27017/apartx_x");
+});

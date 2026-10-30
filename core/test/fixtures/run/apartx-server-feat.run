@@ -1,0 +1,6 @@
+container=wtdev-apartx-server-feat
+port=4010
+branch=feature/feat
+started=1700000000
+project=apartx-server
+slug=feat

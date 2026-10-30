@@ -1,0 +1,185 @@
+import { test, expect, afterAll } from "bun:test";
+import { createServer } from "../src/index";
+import { WT_PROTOCOL_VERSION, type Worktree, type RunInstance, type BaseSpec } from "@wt/shared";
+
+// Read paths now call @wt/core directly; inject the providers so tests stay hermetic
+// (no real orchestrator/git). mergeInstances still runs in the server. Action paths
+// (start/stop/rm/link/logs/new) keep going through the wt subprocess → wtBin stub.
+const STUB = new URL("./fixtures/wt-stub.sh", import.meta.url).pathname;
+const WORKTREES: Worktree[] = [
+  { project: "apartx-cabinet", slug: "x", branch: "feature/x", port: 4231, path: "/w/x" },
+  { project: "apartx-spaces", slug: "y", branch: "feature/y", port: 3512, path: "/w/y" },
+];
+const RUNNING: RunInstance[] = [
+  { project: "apartx-cabinet", slug: "x", branch: "feature/x", port: 4231, pid: 12345, container: "wtdev-apartx-cabinet-x", started: 100, alive: true },
+];
+const READERS = {
+  readWorktrees: async () => WORKTREES,
+  readRunning: async () => RUNNING,
+  readProjects: async () => ["apartx-server", "apartx-cabinet"],
+  readBases: async () => [] as BaseSpec[],
+};
+const EMPTY_READERS = {
+  readWorktrees: async () => [] as Worktree[],
+  readRunning: async () => [] as RunInstance[],
+  readProjects: async () => [] as string[],
+  readBases: async () => [] as BaseSpec[],
+};
+const server = createServer({ wtBin: STUB, port: 0, pollMs: 50, ...READERS });
+const emptyServer = createServer({ wtBin: STUB, port: 0, pollMs: 50, ...EMPTY_READERS });
+
+afterAll(() => { server.stop(true); emptyServer.stop(true); });
+
+test("GET /api/health reports the protocol version", async () => {
+  const res = await fetch(`http://localhost:${server.port}/api/health`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ version: WT_PROTOCOL_VERSION });
+});
+
+test("GET /api/instances returns merged list", async () => {
+  const res = await fetch(`http://localhost:${server.port}/api/instances`);
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  // cabinet/x is running (up); spaces/y is a worktree with no instance (down)
+  const byKey = Object.fromEntries(body.map((i: any) => [`${i.project}/${i.slug}`, i.status]));
+  expect(byKey["apartx-cabinet/x"]).toBe("up");
+  expect(byKey["apartx-spaces/y"]).toBe("down");
+});
+
+test("GET /api/instances includes a synthetic base row from readBases", async () => {
+  const s = createServer({
+    wtBin: STUB,
+    port: 0,
+    pollMs: 50,
+    readWorktrees: async () => [],
+    readRunning: async () => [],
+    readBases: async () => [{ project: "apartx-cabinet", branch: "develop", port: 3500 }],
+  });
+  const res = await fetch(`http://localhost:${s.port}/api/instances`);
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ project: "apartx-cabinet", slug: "base", port: 3500, status: "down" }),
+    ]),
+  );
+  s.stop(true);
+});
+
+test("GET /api/events streams an initial instances event", async () => {
+  const res = await fetch(`http://localhost:${server.port}/api/events`);
+  const reader = res.body!.getReader();
+  const { value } = await reader.read();
+  const chunk = new TextDecoder().decode(value);
+  expect(chunk).toContain("event: instances");
+  await reader.cancel();
+});
+
+test("GET /api/events pushes an initial event even when the system is empty", async () => {
+  const res = await fetch(`http://localhost:${emptyServer.port}/api/events`);
+  const reader = res.body!.getReader();
+  const { value } = await reader.read();
+  const chunk = new TextDecoder().decode(value);
+  expect(chunk).toContain("event: instances");
+  expect(chunk).toContain("data: []");
+  await reader.cancel();
+});
+
+test("POST .../stop awaits wt and returns its exit code", async () => {
+  const res = await fetch(
+    `http://localhost:${server.port}/api/instances/apartx-cabinet/x/stop`,
+    { method: "POST" },
+  );
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ code: 0 });
+});
+
+test("POST .../start is fire-and-forget (202 ok)", async () => {
+  const res = await fetch(
+    `http://localhost:${server.port}/api/instances/apartx-cabinet/x/start`,
+    { method: "POST" },
+  );
+  expect(res.status).toBe(202);
+  expect(await res.json()).toEqual({ ok: true });
+});
+
+test("GET .../logs streams log lines as SSE", async () => {
+  const res = await fetch(`http://localhost:${server.port}/api/instances/apartx-cabinet/x/logs`);
+  expect(res.headers.get("Content-Type")).toContain("text/event-stream");
+  let text = "";
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  for (let i = 0; i < 50; i++) {
+    const { value, done } = await reader.read();
+    if (value) text += dec.decode(value);
+    if (done || text.includes("mongo connected")) break;
+  }
+  await reader.cancel();
+  expect(text).toContain("event: log");
+  expect(text).toContain("App running");
+  expect(text).toContain("mongo connected");
+});
+
+test("unknown action method → 405", async () => {
+  const res = await fetch(`http://localhost:${server.port}/api/instances/p/s/stop`);
+  expect(res.status).toBe(405);
+});
+
+test("GET /api/projects lists project names", async () => {
+  const res = await fetch(`http://localhost:${server.port}/api/projects`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(["apartx-server", "apartx-cabinet"]);
+});
+
+test("POST /api/worktrees is fire-and-forget (202)", async () => {
+  const res = await fetch(`http://localhost:${server.port}/api/worktrees`, {
+    method: "POST",
+    body: JSON.stringify({ project: "apartx-server", slug: "feat-x", isolatedDb: true }),
+  });
+  expect(res.status).toBe(202);
+  expect(await res.json()).toEqual({ ok: true });
+});
+
+test("POST /api/worktrees requires project + slug (400)", async () => {
+  const res = await fetch(`http://localhost:${server.port}/api/worktrees`, {
+    method: "POST",
+    body: JSON.stringify({ project: "apartx-server" }),
+  });
+  expect(res.status).toBe(400);
+});
+
+test("DELETE /api/worktrees/:p/:slug returns exit code", async () => {
+  const res = await fetch(
+    `http://localhost:${server.port}/api/worktrees/apartx-cabinet/x`,
+    { method: "DELETE" },
+  );
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ code: 0 });
+});
+
+test("GET /api/meta returns the injected title", async () => {
+  const s = createServer({ wtBin: STUB, port: 0, pollMs: 50, ...READERS, readTitle: async () => "My Workspace" });
+  const res = await fetch(`http://localhost:${s.port}/api/meta`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ title: "My Workspace" });
+  s.stop(true);
+});
+
+test("GET /api/meta returns null title when unset", async () => {
+  const s = createServer({ wtBin: STUB, port: 0, pollMs: 50, ...READERS, readTitle: async () => null });
+  const res = await fetch(`http://localhost:${s.port}/api/meta`);
+  expect(await res.json()).toEqual({ title: null });
+  s.stop(true);
+});
+
+test("POST .../link and .../unlink return exit codes", async () => {
+  const link = await fetch(`http://localhost:${server.port}/api/instances/apartx-cabinet/x/link`, {
+    method: "POST",
+    body: JSON.stringify({ linkSlug: "x" }),
+  });
+  expect(await link.json()).toEqual({ code: 0 });
+  const unlink = await fetch(`http://localhost:${server.port}/api/instances/apartx-cabinet/x/unlink`, {
+    method: "POST",
+  });
+  expect(await unlink.json()).toEqual({ code: 0 });
+});

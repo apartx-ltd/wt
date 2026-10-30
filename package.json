@@ -1,0 +1,14 @@
+{
+  "name": "@wt/root",
+  "private": true,
+  "type": "module",
+  "workspaces": ["shared", "server", "tui", "web", "core", "cli", "plugins/meteor", "plugins/node", "plugins/registry"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

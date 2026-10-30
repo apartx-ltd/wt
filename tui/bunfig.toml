@@ -1,0 +1,3 @@
+# Required by @opentui/solid: runs the Solid JSX/babel transform under Bun.
+# Without this preload, Bun's default JSX transform runs and Solid reactivity breaks.
+preload = ["@opentui/solid/preload"]

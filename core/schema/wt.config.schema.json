@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://apartx.dev/wt.config.schema.json",
+  "title": "wt workspace config",
+  "description": "Declarative configuration for the universal wt orchestrator (see tools/wt/core/src/config.ts WorkspaceConfig).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "title": { "type": "string", "description": "Human-facing workspace title shown in the TUI/web frontends." },
+    "serverProject": { "type": "string", "description": "Project name used as the --server link shorthand target." },
+    "projectsDir": { "type": "string", "description": "Multi-repo: subdir holding the repos (default 'projects'). Mutually exclusive with 'project'." },
+    "project": { "$ref": "#/definitions/projectConfig", "description": "Single-repo: the one project (repo root). Mutually exclusive with 'projects'." },
+    "projects": {
+      "type": "object",
+      "description": "Multi-repo: map of project directory name -> project config.",
+      "additionalProperties": { "$ref": "#/definitions/projectConfig" }
+    },
+    "branches": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base": { "type": "string", "description": "Fork/integration branch (e.g. develop)." },
+        "prefix": { "type": "string", "description": "Worktree branch prefix and slug<->branch rule (e.g. feature/)." }
+      },
+      "required": ["base", "prefix"]
+    },
+    "ports": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "step": { "type": "integer", "minimum": 1, "description": "Port offset step between worktrees (default 10)." } }
+    },
+    "defaults": { "$ref": "#/definitions/projectConfig", "description": "Defaults deep-merged into every project." },
+    "links": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[^:]+:[^:]+:[^:]+:.+$" },
+      "description": "Inter-service mesh: 'consumer:target:mechanism:key' strings."
+    }
+  },
+  "oneOf": [
+    { "required": ["project"], "not": { "required": ["projects"] } },
+    { "required": ["projects"], "not": { "required": ["project"] } }
+  ],
+  "definitions": {
+    "dockerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "image": { "type": "string" } },
+      "required": ["image"]
+    },
+    "coreSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "slug": { "type": "string" } },
+      "required": ["slug"]
+    },
+    "projectConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plugin": { "type": "string", "description": "Plugin package name; falls back to defaults.plugin." },
+        "docker": { "$ref": "#/definitions/dockerConfig", "description": "Present => dockerized; image is the sole source." },
+        "core": { "$ref": "#/definitions/coreSpec", "description": "Present => part of the core stack (wt up/down)." },
+        "env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Declarative env templates (values may contain ${port}/${offset})." }
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@wt/tui",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "e2e": "bun test/flow.e2e.tsx && bun test/scroll.e2e.tsx"
+  },
+  "dependencies": {
+    "@wt/shared": "workspace:*",
+    "@opentui/core": "0.4.1",
+    "@opentui/solid": "0.4.1",
+    "solid-js": "1.9.12"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

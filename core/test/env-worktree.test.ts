@@ -1,0 +1,83 @@
+import { test, expect } from "bun:test";
+import { branchDbSuffix, rootUrlWithPort, generateEnvWorktree } from "../src/env-worktree";
+
+test("branchDbSuffix strips leading type/ and slugifies", () => {
+  expect(branchDbSuffix("feature/eu-accounting-1a")).toBe("eu_accounting_1a");
+  expect(branchDbSuffix("hotfix/fix.the/thing")).toBe("fix_the_thing");
+  expect(branchDbSuffix("main")).toBe("main");
+});
+
+test("branchDbSuffix stays generic", () => {
+  expect(branchDbSuffix("feature/eu-acct-1a")).toBe("eu_acct_1a");
+});
+
+const HEADER = "# СГЕНЕРИРОВАНО scripts/worktree-env.sh — НЕ редактировать вручную";
+
+test("generateEnvWorktree emits only generic lines + caller tailLines", () => {
+  const out = generateEnvWorktree({
+    project: "p",
+    branch: "feature/x",
+    offset: 10,
+    basePort: 3000,
+    baseRootUrl: "http://h:3000",
+    extraEnvLines: ["RSPACK_DEVSERVER_PORT=8095"],
+    tailLines: ["MONGO_OPLOG_URL=", "MONTI_APP_ID=", "MONTI_APP_SECRET="],
+  });
+  expect(out).toContain("PORT=3010");
+  expect(out).toContain("RSPACK_DEVSERVER_PORT=8095");
+  expect(out).toContain("ROOT_URL=http://h:3010");
+  // tail comes AFTER ROOT_URL, in order
+  expect(out.indexOf("MONGO_OPLOG_URL=")).toBeGreaterThan(out.indexOf("ROOT_URL="));
+  expect(out.indexOf("MONTI_APP_ID=")).toBeGreaterThan(out.indexOf("MONGO_OPLOG_URL="));
+  // core no longer hardcodes MONTI when caller passes nothing
+  const bare = generateEnvWorktree({ project: "p", branch: "b", offset: 0, basePort: 3000, baseRootUrl: "http://h:3000" });
+  expect(bare).not.toContain("MONTI_APP_ID=");
+  expect(bare).not.toContain("MONGO_OPLOG_URL=");
+});
+
+test("generateEnvWorktree shared-db form (no tail)", () => {
+  expect(
+    generateEnvWorktree({
+      project: "apartx-server",
+      branch: "feature/x",
+      offset: 20,
+      basePort: 4000,
+      extraEnvLines: ["RSPACK_DEVSERVER_PORT=8105", "HMR_PUBLIC_PORT=8105"],
+      baseRootUrl: "http://build.apartx.kz:4000",
+    }),
+  ).toBe(
+    `${HEADER}\n# project=apartx-server  branch=feature/x  offset=20\n` +
+      `PORT=4020\nRSPACK_DEVSERVER_PORT=8105\nHMR_PUBLIC_PORT=8105\nROOT_URL=http://build.apartx.kz:4020\n`,
+  );
+});
+
+test("generateEnvWorktree omits HMR lines when extraEnvLines is absent (non-dockerized)", () => {
+  const out = generateEnvWorktree({
+    project: "apartx-spaces",
+    branch: "feature/x",
+    offset: 20,
+    basePort: 3500,
+    extraEnvLines: [],
+    baseRootUrl: "http://build.apartx.kz:3500",
+  });
+  expect(out).toContain("PORT=3520\n");
+  expect(out).toContain("ROOT_URL=http://build.apartx.kz:3520\n");
+  expect(out).not.toContain("RSPACK_DEVSERVER_PORT");
+  expect(out).not.toContain("HMR_PUBLIC_PORT");
+});
+
+test("generateEnvWorktree appends tailLines after ROOT_URL in order", () => {
+  const out = generateEnvWorktree({
+    project: "apartx-server",
+    branch: "feature/x",
+    offset: 20,
+    basePort: 4000,
+    extraEnvLines: ["RSPACK_DEVSERVER_PORT=8105", "HMR_PUBLIC_PORT=8105"],
+    baseRootUrl: "http://build.apartx.kz:4000",
+    tailLines: ["MONGO_OPLOG_URL=", "MONTI_APP_ID=", "MONTI_APP_SECRET=", "MONGO_URL=mongodb://h:27017/apartx_x"],
+  });
+  expect(out.endsWith("MONGO_URL=mongodb://h:27017/apartx_x\n")).toBe(true);
+  expect(out).toContain("PORT=4020\n");
+  expect(out).toContain("ROOT_URL=http://build.apartx.kz:4020\n");
+  expect(rootUrlWithPort("http://build.apartx.kz:4000", 4020)).toBe("http://build.apartx.kz:4020");
+});

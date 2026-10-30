@@ -1,0 +1,6 @@
+{
+  "name": "@wt/server",
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": { "@wt/shared": "workspace:*", "@wt/core": "workspace:*" }
+}

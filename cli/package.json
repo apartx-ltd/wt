@@ -1,0 +1,6 @@
+{
+  "name": "@wt/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": { "@wt/core": "workspace:*", "@wt/shared": "workspace:*", "@wt/plugins": "workspace:*" }
+}

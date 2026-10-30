@@ -1,0 +1,139 @@
+@import 'tailwindcss';
+
+/* Scan the vendored kit + app sources for Tailwind class usage. */
+@source './lib/apartx-ui/src/lib/**/*.{svelte,ts}';
+@source './**/*.{svelte,js,ts}';
+
+/*
+ * Design tokens → Tailwind mapping (colors incl. tonal surface-containers,
+ * shape, elevation) + typescale @utility classes. Single source of truth is the
+ * apartx-ui kit. The `--color-*` read through `--theme-*`, defined by the static
+ * `:root` / `html.dark` blocks below (no runtime applyTheme → SSR-safe).
+ */
+@import 'apartx-ui/styles/tokens.css';
+@import 'apartx-ui/styles/typescale.css';
+
+/*
+ * Static ApartX-blue (M3) palette — defined in CSS, not the kit's runtime
+ * applyTheme(). This app is SSR (adapter-node): a JS palette would flash light
+ * before hydration. SSR sets `<html class="light|dark">` from the `theme` cookie
+ * (hooks.server.ts), so the correct block paints on first byte. `:root` = light;
+ * `html.dark` = dark (dark wins by source order). Mirrors apartx-help.
+ */
+:root {
+  --theme-primary: #1976d2;
+  --theme-on-primary: #ffffff;
+  --theme-primary-container: #d1e4ff;
+  --theme-on-primary-container: #001d36;
+
+  --theme-secondary: #535f70;
+  --theme-on-secondary: #ffffff;
+  --theme-secondary-container: #d7e3f7;
+  --theme-on-secondary-container: #101c2b;
+
+  --theme-tertiary: #6b5778;
+  --theme-on-tertiary: #ffffff;
+  --theme-tertiary-container: #f2daff;
+  --theme-on-tertiary-container: #251431;
+
+  --theme-error: #ba1a1a;
+  --theme-on-error: #ffffff;
+  --theme-error-container: #ffdad6;
+  --theme-on-error-container: #410002;
+
+  --theme-background: #fdfcff;
+  --theme-on-background: #1a1c1e;
+  --theme-surface: #fdfcff;
+  --theme-on-surface: #1a1c1e;
+  --theme-surface-variant: #dfe2eb;
+  --theme-on-surface-variant: #43474e;
+
+  --theme-surface-dim: #dadce0;
+  --theme-surface-bright: #fdfcff;
+  --theme-surface-container-lowest: #ffffff;
+  --theme-surface-container-low: #f7f9fc;
+  --theme-surface-container: #f1f4f9;
+  --theme-surface-container-high: #ebeef3;
+  --theme-surface-container-highest: #e6e8ee;
+
+  --theme-outline: #73777f;
+  --theme-outline-variant: #c3c7cf;
+  --theme-shadow: #000000;
+  --theme-scrim: #000000;
+
+  --theme-inverse-surface: #2f3033;
+  --theme-inverse-on-surface: #f1f0f4;
+  --theme-inverse-primary: #a0cafd;
+
+  --theme-success: #2e7d32;
+  --theme-on-success: #ffffff;
+  --theme-warning: #ed6c02;
+  --theme-on-warning: #ffffff;
+  --theme-info: #0288d1;
+  --theme-on-info: #ffffff;
+}
+
+html.dark {
+  --theme-primary: #a0cafd;
+  --theme-on-primary: #003258;
+  --theme-primary-container: #00497d;
+  --theme-on-primary-container: #d1e4ff;
+
+  --theme-secondary: #bbc7db;
+  --theme-on-secondary: #253140;
+  --theme-secondary-container: #3b4858;
+  --theme-on-secondary-container: #d7e3f7;
+
+  --theme-tertiary: #d7bde4;
+  --theme-on-tertiary: #3b2948;
+  --theme-tertiary-container: #523f5f;
+  --theme-on-tertiary-container: #f2daff;
+
+  --theme-error: #ffb4ab;
+  --theme-on-error: #690005;
+  --theme-error-container: #93000a;
+  --theme-on-error-container: #ffdad6;
+
+  --theme-background: #1a1c1e;
+  --theme-on-background: #e2e2e6;
+  --theme-surface: #1a1c1e;
+  --theme-on-surface: #e2e2e6;
+  --theme-surface-variant: #43474e;
+  --theme-on-surface-variant: #c3c7cf;
+
+  --theme-surface-dim: #111416;
+  --theme-surface-bright: #37393c;
+  --theme-surface-container-lowest: #0c0e11;
+  --theme-surface-container-low: #1a1c1e;
+  --theme-surface-container: #1e2022;
+  --theme-surface-container-high: #282a2d;
+  --theme-surface-container-highest: #333538;
+
+  --theme-outline: #8d9199;
+  --theme-outline-variant: #43474e;
+  --theme-shadow: #000000;
+  --theme-scrim: #000000;
+
+  --theme-inverse-surface: #e2e2e6;
+  --theme-inverse-on-surface: #2f3033;
+  --theme-inverse-primary: #1976d2;
+
+  --theme-success: #81c784;
+  --theme-on-success: #00390a;
+  --theme-warning: #ffb74d;
+  --theme-on-warning: #3e2600;
+  --theme-info: #4fc3f7;
+  --theme-on-info: #00344a;
+}
+
+@theme {
+  --font-sans: 'Roboto', 'Helvetica', 'Arial', system-ui, sans-serif;
+}
+
+/* Paint the page backdrop from the theme token on first paint (SSR sets class). */
+html,
+body {
+  background-color: var(--theme-surface);
+  color: var(--theme-on-surface);
+  font-family: var(--font-sans);
+}

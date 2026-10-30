@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "jsxImportSource": "@opentui/solid",
+    "allowImportingTsExtensions": true,
+    "paths": { "@wt/shared": ["./shared/src/index.ts"], "@wt/core": ["./core/src/index.ts"] }
+  },
+  "include": [
+    "shared/src", "shared/test",
+    "server/src", "server/test",
+    "tui/src", "tui/test", "tui/bin",
+    "core/src", "core/test",
+    "cli/src", "cli/bin", "cli/test"
+  ]
+}

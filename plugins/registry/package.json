@@ -1,0 +1,8 @@
+{
+  "name": "@wt/plugins",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": { "@wt/core": "workspace:*", "@wt/plugin-meteor": "workspace:*", "@wt/plugin-node": "workspace:*" }
+}
