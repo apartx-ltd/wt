@@ -154,6 +154,9 @@ that started it.
   multi-repo, `links`, `env` templates, editor types and the JSON schema.
 - [docs/plugins.md](docs/plugins.md) — the `StackPlugin` contract, the bundled Node and Meteor
   plugins, env layering and the `.env.worktree` lifecycle.
+- [docs/agents.md](docs/agents.md) — for coding agents: a checklist to set up a workspace, and a
+  block to paste into the workspace's `AGENTS.md` / `CLAUDE.md` so later sessions use `wt`
+  instead of hand-made worktrees and ports. [AGENTS.md](AGENTS.md) is for working on `wt` itself.
 
 Plugin ids are package specifiers: `"@apartx/wt/plugin-node"` and `"@apartx/wt/plugin-meteor"`.
 **Migrating from the pre-release ids:** `"@wt/plugin-node"` and `"@wt/plugin-meteor"` are no
