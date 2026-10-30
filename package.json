@@ -49,6 +49,7 @@
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit -p tsconfig.json",
     "build:web": "cd web && bun run build",
+    "prepack": "bun run build:web",
     "e2e": "bun tui/test/flow.e2e.tsx && bun tui/test/scroll.e2e.tsx"
   },
   "dependencies": {
