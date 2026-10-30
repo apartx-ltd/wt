@@ -4,7 +4,7 @@ import { mkdir, writeFile, appendFile, readFile, unlink, rm } from "node:fs/prom
 import { resolveBasePort, resolveAuxBasePort, readLedger, allocateOffset, appendLedger, upsertLedger, readEnvValue } from "./ports";
 import { generateEnvWorktree, branchDbSuffix } from "./env-worktree";
 import { containerName } from "./containers";
-import { loadPlugin, type EnvCtx, type InstanceCtx } from "./plugin";
+import { loadPlugin, type EnvCtx, type InstanceCtx, type StackPlugin } from "./plugin";
 import { loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, resolvePortStep } from "./config";
 import { stopInstance } from "./run";
 import { installDockerDeps, installHostDeps } from "./deps";
@@ -265,9 +265,9 @@ export async function createWorktree(
   };
   const installArgv = plugin.install(installCtx).argv;
   if (config.docker?.image) {
-    await installDockerDeps(dir, cn, config.docker!.image, plugin.docker!(installCtx).mounts, installArgv);
+    await installDockerDeps(dir, cn, config.docker!.image, plugin.docker!(installCtx).mounts, installArgv, plugin.deps);
   } else {
-    await installHostDeps(dir, installArgv);
+    await installHostDeps(dir, installArgv, plugin.deps);
   }
 
   const computed = await commitWorktreeEnv(orch, project, branch, dir, { isolatedDb: opts.isolatedDb });
@@ -288,6 +288,16 @@ export async function createWorktree(
   }
 
   return { dir, branch, port: computed.port, offset: computed.offset };
+}
+
+/**
+ * Per-worktree docker volumes of an instance, as the plugin's `docker()` declares them
+ * (`ownedVolumes`). A plugin without `docker()` gets the legacy meteor pair — the names
+ * `wt rm` removed before plugins described their own layout.
+ */
+export function instanceVolumes(plugin: StackPlugin | null, ctx: InstanceCtx): string[] {
+  const owned = plugin?.docker?.(ctx).ownedVolumes;
+  return owned ?? [`${ctx.container}-node_modules`, `${ctx.container}-meteor_local`];
 }
 
 export interface RemoveWorktreeOpts {
@@ -318,7 +328,14 @@ export async function removeWorktree(
   const config = await resolveProjectConfig(orch, project);
   if (config.docker?.image) {
     const cn = containerName(project, slug);
-    await shOk(["docker", "volume", "rm", `${cn}-node_modules`, `${cn}-meteor_local`]);
+    // A plugin that no longer loads (renamed id) must not keep the worktree around: fall back
+    // to the legacy volume names. docker() reads worktreeDir/container only — the rest of ctx is there for the type.
+    const plugin = await loadPlugin(config.plugin).catch(() => null);
+    const volumes = instanceVolumes(plugin, {
+      orch, project, slug, branch: "", projectDir: pdir, worktreeDir: dir, config,
+      port: 0, offset: 0, container: cn, mode: "docker", settingsPath: null, extraPorts: {},
+    });
+    if (volumes.length) await shOk(["docker", "volume", "rm", ...volumes]);
     await unlink(mergedEnvPath(orch, project, slug)).catch(() => {});
     await unlink(dockerSettingsPath(orch, project, slug)).catch(() => {});
   }

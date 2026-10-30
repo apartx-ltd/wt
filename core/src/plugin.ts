@@ -29,6 +29,20 @@ export interface ExtraPortSpec {
   envKey?: string;
 }
 
+/**
+ * Where a stack keeps its installed dependencies and which files decide what to install.
+ * The core writes its install fingerprint into `dir` (host: `<worktree>/<dir>/.wt-deps-hash`,
+ * docker: a named volume per worktree derived from `dir`), reinstalls when `files` change, and
+ * treats a missing `dir` as "nothing installed yet". Default: node's `node_modules` and the
+ * npm/pnpm/yarn/bun manifest and lock files.
+ */
+export interface DepsSpec {
+  /** directory relative to the worktree root (node: `node_modules`, cargo: `target`). */
+  dir: string;
+  /** files whose contents fingerprint the dependency set (node: `package.json` + locks). */
+  files: string[];
+}
+
 /** Base context: everything the core knows about (project, slug) before launch. */
 export interface PluginCtx {
   orch: string;
@@ -84,6 +98,8 @@ export interface StackPlugin {
   /** "dotenvx" → the core wraps devCommand in a dotenvx chain; "inline" (default) → as an env map. */
   envInjection?: "dotenvx" | "inline";
   install(ctx: WorktreeCtx): Command;
+  /** dependency layout for the core's install/staleness check; default: node_modules + npm files. */
+  deps?: DepsSpec;
   /** worktree directories (relative to its root) that install/build restores — `wt slim` removes them. */
   artifactDirs?: string[];
   devCommand(ctx: InstanceCtx): Command;

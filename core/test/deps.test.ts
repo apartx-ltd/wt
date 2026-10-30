@@ -10,6 +10,8 @@ import {
   formatDepsStamp,
   parseVolumeProbe,
   ensureHostDeps,
+  depsVolume,
+  NODE_DEPS,
 } from "../src/deps";
 
 let dir: string;
@@ -88,4 +90,44 @@ test("ensureHostDeps: an install that rewrote the lock, then a lock revert — n
   await writeFile(resolve(dir, "package-lock.json"), committed);
   await ensureHostDeps(dir, fakeInstall());
   expect(await installs()).toBe(1);
+});
+
+// --- plugin-declared deps layout (a Rust worktree has target/ and Cargo files, no node_modules) ---
+
+const CARGO_DEPS = { dir: "target", files: ["Cargo.toml", "Cargo.lock"] };
+const fakeCargoFetch = () => ["sh", "-c", "echo x >> installs.log"];
+
+test("ensureHostDeps with a deps spec: stamp lives in that dir, package files are ignored, node_modules is not created", async () => {
+  await writeFile(resolve(dir, "Cargo.toml"), `[package]\nname = "api"\n`);
+  await writeFile(resolve(dir, "Cargo.lock"), `version = 4\n`);
+  await ensureHostDeps(dir, fakeCargoFetch(), CARGO_DEPS);
+  expect(await installs()).toBe(1);
+  expect(existsSync(resolve(dir, "target", DEPS_STAMP))).toBe(true);
+  expect(existsSync(resolve(dir, "node_modules"))).toBe(false);
+
+  // a fresh install is not repeated, and npm files do not count as dependencies here
+  await writeFile(resolve(dir, "package-lock.json"), `{"changed":true}`);
+  await ensureHostDeps(dir, fakeCargoFetch(), CARGO_DEPS);
+  expect(await installs()).toBe(1);
+
+  // the lock of the declared files does
+  await writeFile(resolve(dir, "Cargo.lock"), `version = 4\n[[package]]\nname = "axum"\n`);
+  await ensureHostDeps(dir, fakeCargoFetch(), CARGO_DEPS);
+  expect(await installs()).toBe(2);
+});
+
+test("depsHash honors the spec's file list", async () => {
+  await writeFile(resolve(dir, "Cargo.toml"), `[package]\nname = "api"\n`);
+  const a = await depsHash(dir, CARGO_DEPS);
+  await writeFile(resolve(dir, "package.json"), `{"changed":true}`);
+  expect(await depsHash(dir, CARGO_DEPS)).toBe(a);
+  await writeFile(resolve(dir, "Cargo.toml"), `[package]\nname = "api2"\n`);
+  expect(await depsHash(dir, CARGO_DEPS)).not.toBe(a);
+});
+
+test("depsVolume: the container's volume is named after the deps dir (node_modules keeps its legacy name)", () => {
+  expect(depsVolume("wtdev-app-slug")).toBe("wtdev-app-slug-node_modules");
+  expect(depsVolume("wtdev-app-slug", NODE_DEPS)).toBe("wtdev-app-slug-node_modules");
+  expect(depsVolume("wtdev-api-slug", CARGO_DEPS)).toBe("wtdev-api-slug-target");
+  expect(depsVolume("wtdev-app-slug", { dir: ".meteor/local", files: [] })).toBe("wtdev-app-slug-meteor_local");
 });
