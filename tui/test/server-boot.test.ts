@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { WT_PROTOCOL_VERSION } from "#shared";
-import { ensureServer, type BootDeps } from "../src/server-boot";
+import { ensureServer, serverConnectHost, type BootDeps } from "../src/server-boot";
 
 const ORCH = mkdtempSync(resolve(tmpdir(), "wt-boot-orch-"));
 const OTHER_ORCH = mkdtempSync(resolve(tmpdir(), "wt-boot-other-"));
@@ -175,4 +175,23 @@ test("/api/meta failing twice replaces the daemon", async () => {
   const res = await ensureServer(OPTS, deps);
   expect(killed).toBe(true);
   expect(res.replaced).toBe(true);
+});
+
+test("serverConnectHost follows the daemon's bind host (loopback by default)", () => {
+  expect(serverConnectHost({})).toBe("127.0.0.1");
+  expect(serverConnectHost({ WT_SERVER_HOST: "0.0.0.0" })).toBe("127.0.0.1");
+  expect(serverConnectHost({ WT_SERVER_HOST: "::" })).toBe("127.0.0.1");
+  expect(serverConnectHost({ WT_SERVER_HOST: "192.168.1.5" })).toBe("192.168.1.5");
+  expect(serverConnectHost({ WT_SERVER_HOST: "::1" })).toBe("[::1]");
+});
+
+test("ensureServer targets 127.0.0.1, the default bind host", async () => {
+  const saved = process.env.WT_SERVER_HOST;
+  delete process.env.WT_SERVER_HOST;
+  try {
+    const res = await ensureServer(OPTS, currentDeps());
+    expect(res.baseUrl).toBe(`http://127.0.0.1:${OPTS.port}`);
+  } finally {
+    if (saved !== undefined) process.env.WT_SERVER_HOST = saved;
+  }
 });

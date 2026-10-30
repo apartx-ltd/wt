@@ -20,7 +20,9 @@ export class HttpWtClient {
   private async send<T>(path: string, method = "POST", body?: unknown): Promise<T> {
     const res = await fetch(`${this.baseUrl}${path}`, {
       method,
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body !== undefined
+        ? { body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }
+        : {}),
     });
     if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}`);
     return res.json() as Promise<T>;

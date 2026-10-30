@@ -82,7 +82,7 @@ wt start api my-feature                # background instance on :3010
 wt start storefront my-feature --link  # on :3120, with API_URL=http://localhost:3010
 wt ps                                  # what runs, on which port
 wt ui                                  # full-screen terminal dashboard
-wt web                                 # web dashboard on http://localhost:4499
+wt web                                 # web dashboard on http://127.0.0.1:4499
 wt down                                # stop everything
 ```
 
@@ -135,8 +135,8 @@ slug. Most commands also accept `--json`. `WT_DEBUG=1` prints the stack trace of
 with live status, and keys to start, stop, restart, link, unlink, create and remove worktrees and to
 tail logs. `wt web` shows the same live instance list in the browser.
 
-Both talk to a small HTTP daemon, the wt-server, on `WT_SERVER_PORT` (default `4499`), which
-also serves the prebuilt web dashboard; `wt web` prints its URL and keeps running until Ctrl-C.
+Both talk to a small HTTP daemon, the wt-server, on `127.0.0.1` (`WT_SERVER_HOST`) port
+`WT_SERVER_PORT` (default `4499`), which also serves the prebuilt web dashboard; `wt web` prints its URL and keeps running until Ctrl-C.
 `wt web --dev` runs the dashboard's vite dev server on `WT_WEB_PORT` (default `5199`) instead;
 it needs a source checkout of `wt` (the `web/` sources are not in the npm package).
 
@@ -192,8 +192,12 @@ depend on it: `web/build` ships prebuilt in the tarball (`prepack` runs `build:w
   process on the port with `lsof`.
 - **No third-party plugins yet.** The plugin registry knows only the bundled plugins; loading a
   plugin from another package is planned.
-- **The wt-server has no authentication** and listens on all interfaces. It can start and stop
-  instances and remove worktrees — use it on a trusted machine and network.
+- **The wt-server has no authentication.** It can start and stop instances and remove
+  worktrees, so it binds `127.0.0.1` by default and rejects state-changing requests whose
+  `Origin` is not a loopback address (a web page on another site cannot drive it through your
+  browser). `WT_SERVER_HOST=0.0.0.0` opts into exposing it on the LAN — still with no
+  authentication, so anyone who can reach the port controls your worktrees; do that only on a
+  trusted network.
 
 ## License
 

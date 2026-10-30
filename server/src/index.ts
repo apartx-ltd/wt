@@ -7,6 +7,11 @@ import { instancesChanged } from "./poller";
 
 export interface ServerOpts extends WtOpts {
   port?: number;
+  /**
+   * Interface to bind. Default: `WT_SERVER_HOST` env, else `127.0.0.1` (loopback only).
+   * `0.0.0.0` exposes the daemon on the LAN — it has no auth, so that is an explicit opt-in.
+   */
+  hostname?: string;
   pollMs?: number;
   // `orch` (from WtOpts): workspace root for core reads AND every spawned CLI.
   // Default: resolveOrch() once at createServer (WT_ORCH env / wt.config.ts upward from cwd).
@@ -89,6 +94,33 @@ async function serveStatic(staticDir: string, pathname: string): Promise<Respons
   return notFound();
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * True if a state-changing request must be refused as cross-origin: it carries an
+ * `Origin` whose host is not loopback. Requests without `Origin` (curl, the TUI, the
+ * CLI) and same-origin dashboard fetches pass; a page on another site (or a DNS-rebound
+ * name) cannot drive `wt` through the visitor's browser. When the daemon is bound to a
+ * non-loopback interface (LAN opt-in), an `Origin` equal to the request's `Host` is
+ * also accepted so the dashboard keeps working when opened by its LAN address.
+ */
+function isCrossOriginWrite(req: Request, loopbackBind: boolean): boolean {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return false;
+  const origin = req.headers.get("origin");
+  if (origin === null) return false;
+  let host: string;
+  let originHost: string;
+  try {
+    const u = new URL(origin);
+    host = u.hostname;
+    originHost = u.host;
+  } catch {
+    return true; // "null" (sandboxed/opaque origins) or garbage
+  }
+  if (LOOPBACK_HOSTS.has(host)) return false;
+  return loopbackBind || originHost !== req.headers.get("host");
+}
+
 export function createServer(serverOpts: ServerOpts = {}) {
   // Resolve the workspace once; `opts` (with orch) is what every runWt/spawnWt* call
   // below receives, so the spawned CLI gets the same root as WT_ORCH.
@@ -98,10 +130,18 @@ export function createServer(serverOpts: ServerOpts = {}) {
   const staticDir = opts.staticDir ?? process.env.WT_STATIC_DIR;
   const { snapshot, readProjects, readTitle } = readers(opts, orch);
 
+  const hostname = opts.hostname ?? process.env.WT_SERVER_HOST ?? "127.0.0.1";
+  const loopbackBind = hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+
   return Bun.serve({
+    hostname,
     port: opts.port ?? 4499,
     async fetch(req) {
       const url = new URL(req.url);
+
+      if (isCrossOriginWrite(req, loopbackBind)) {
+        return Response.json({ error: "cross-origin requests are not allowed" }, { status: 403 });
+      }
 
       // Health/version — clients use this to detect & replace a stale server (see
       // WT_PROTOCOL_VERSION). Must stay a trivial, always-present route.
@@ -261,5 +301,5 @@ export function createServer(serverOpts: ServerOpts = {}) {
 // Direct run: `bun src/index.ts`
 if (import.meta.main) {
   const server = createServer({ port: Number(process.env.PORT ?? 4499) });
-  console.log(`wt-server on http://localhost:${server.port}`);
+  console.log(`wt-server on http://${server.hostname}:${server.port}`);
 }

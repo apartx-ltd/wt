@@ -3,6 +3,17 @@ import { resolve } from "node:path";
 import { WT_PROTOCOL_VERSION, type WtMeta } from "#shared";
 import { canonicalPath } from "#core";
 
+/**
+ * Host clients use to reach the daemon, consistent with its bind host (`WT_SERVER_HOST`,
+ * default `127.0.0.1` — see ServerOpts.hostname; the spawned daemon inherits the env).
+ * A wildcard bind (`0.0.0.0` / `::`) is reached over loopback; an IPv6 literal is bracketed.
+ */
+export function serverConnectHost(env: Record<string, string | undefined> = process.env): string {
+  const host = env.WT_SERVER_HOST?.trim();
+  if (!host || host === "0.0.0.0" || host === "::" || host === "[::]") return "127.0.0.1";
+  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+}
+
 /** GET /api/health → its `version`, or null if absent/unreachable/malformed. */
 export async function fetchServerVersion(baseUrl: string): Promise<number | null> {
   try {
@@ -142,7 +153,7 @@ export async function ensureServer(opts: SpawnOpts, deps: BootDeps = {}): Promis
   const kill = deps.killPort ?? killPort;
   const spawn = deps.spawnServer ?? spawnServer;
   const sleep = deps.sleep ?? ((ms: number) => Bun.sleep(ms));
-  const baseUrl = `http://localhost:${opts.port}`;
+  const baseUrl = `http://${serverConnectHost()}:${opts.port}`;
 
   const isReusable = async (): Promise<boolean> => {
     // One retry: a transient /api/meta failure must not replace a healthy daemon.

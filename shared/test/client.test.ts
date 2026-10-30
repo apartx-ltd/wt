@@ -39,7 +39,9 @@ const srv = Bun.serve({
     if (req.method === "GET" && path === "/api/projects")
       return Response.json(["apartx-server", "apartx-cabinet"]);
     if (req.method === "POST" && path === "/api/worktrees")
-      return Response.json({ ok: true }, { status: 202 });
+      return req.headers.get("content-type") === "application/json"
+        ? Response.json({ ok: true }, { status: 202 })
+        : new Response("json body without Content-Type", { status: 415 });
     if (req.method === "DELETE" && path === "/api/worktrees/p/s")
       return Response.json({ code: 0 });
     if (req.method === "POST" && path === "/api/instances/p/s/link")
@@ -106,7 +108,7 @@ test("listProjects() fetches project names", async () => {
   expect(await client.listProjects()).toEqual(["apartx-server", "apartx-cabinet"]);
 });
 
-test("newWorktree() POSTs and resolves ok", async () => {
+test("newWorktree() POSTs a JSON body with Content-Type and resolves ok", async () => {
   const client = new HttpWtClient(`http://localhost:${srv.port}`);
   expect(await client.newWorktree({ project: "p", slug: "s", isolatedDb: true })).toEqual({ ok: true });
 });

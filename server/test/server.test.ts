@@ -274,3 +274,60 @@ test("without staticDir non-/api paths are 404", async () => {
   const res = await fetch(`http://localhost:${server.port}/`);
   expect(res.status).toBe(404);
 });
+
+describe("bind host and cross-origin guard", () => {
+  // A POST with an incomplete body: 400 means the guard let it through to routing.
+  const post = (origin?: string) =>
+    fetch(`http://127.0.0.1:${server.port}/api/worktrees`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(origin ? { Origin: origin } : {}) },
+      body: JSON.stringify({ project: "apartx-server" }),
+    });
+
+  test("binds loopback by default", () => {
+    expect(server.hostname).toBe("127.0.0.1");
+  });
+
+  test("a write from a foreign Origin is refused with 403 before routing", async () => {
+    const res = await post("https://evil.example");
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "cross-origin requests are not allowed" });
+  });
+
+  test("an opaque Origin (null) is refused", async () => {
+    expect((await post("null")).status).toBe(403);
+  });
+
+  test("a write from a loopback Origin passes the guard", async () => {
+    expect((await post("http://localhost:4499")).status).toBe(400);
+    expect((await post("http://127.0.0.1:5199")).status).toBe(400);
+    expect((await post("http://[::1]:4499")).status).toBe(400);
+  });
+
+  test("a write without Origin (curl, TUI, CLI) passes the guard", async () => {
+    expect((await post()).status).toBe(400);
+  });
+
+  test("reads are never refused for their Origin", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/health`, {
+      headers: { Origin: "https://evil.example" },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test("a LAN bind also accepts the dashboard's own origin (Origin host == Host)", async () => {
+    const lan = createServer({ wtBin: STUB, orch: ORCH, port: 0, hostname: "0.0.0.0", ...EMPTY_READERS });
+    try {
+      const url = `http://127.0.0.1:${lan.port}/api/worktrees`;
+      const init = (origin: string, host: string): RequestInit => ({
+        method: "POST",
+        headers: { Origin: origin, Host: host },
+        body: JSON.stringify({ project: "p" }),
+      });
+      expect((await fetch(url, init("http://192.168.1.5:4499", "192.168.1.5:4499"))).status).toBe(400);
+      expect((await fetch(url, init("https://evil.example", "192.168.1.5:4499"))).status).toBe(403);
+    } finally {
+      lan.stop(true);
+    }
+  });
+});
