@@ -15,7 +15,7 @@ beforeAll(() => {
   workspace = mkdtempSync(resolve(tmpdir(), "wt-config-ws-"));
   writeFileSync(
     resolve(workspace, "wt.config.ts"),
-    `import { defineWorkspace } from "${resolve(import.meta.dir, "../src/config")}";\n` +
+    `import { defineWorkspace } from "@apartx/wt";\n` +
       `export default defineWorkspace({\n` +
       `  projectsDir: "projects",\n` +
       `  serverProject: "srv",\n` +
@@ -168,7 +168,7 @@ test("resolveProjectsDir returns '.' for single-repo config, 'projects' for mult
   try {
     writeFileSync(
       resolve(orch, "wt.config.ts"),
-      `import { defineWorkspace } from "${resolve(import.meta.dir, "../src/config")}";\n` +
+      `import { defineWorkspace } from "@apartx/wt";\n` +
         `export default defineWorkspace({ branches: { base: "main", prefix: "feat/" }, project: { plugin: "@apartx/wt/plugin-node" } });\n`,
     );
     expect(await resolveProjectsDir(orch)).toBe(".");
@@ -204,7 +204,7 @@ test("resolveServerProject reads serverProject from wt.config.ts; null when unse
   try {
     writeFileSync(
       resolve(orch, "wt.config.ts"),
-      `import { defineWorkspace } from "${resolve(import.meta.dir, "../src/config")}";\n` +
+      `import { defineWorkspace } from "@apartx/wt";\n` +
         `export default defineWorkspace({ serverProject: "srv", projects: { srv: { plugin: "@apartx/wt/plugin-node" } } });\n`,
     );
     expect(await resolveServerProject(orch)).toBe("srv");

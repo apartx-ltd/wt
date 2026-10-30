@@ -1,5 +1,6 @@
 import { resolve, basename } from "node:path";
 import { existsSync } from "node:fs";
+import { registerSelfResolver } from "./self-resolve";
 
 /** Docker-режим проекта: наличие image ⇒ проект запускается контейнером. */
 export interface DockerConfig {
@@ -144,6 +145,7 @@ export function validateConfig(config: WorkspaceConfig, repoName = "app"): Resol
  */
 export async function loadConfig(orch: string, repoName = "app"): Promise<ResolvedConfig> {
   const path = resolve(orch, "wt.config.ts");
+  registerSelfResolver(); // `import … from "@apartx/wt"` в конфиге — без node_modules у потребителя
   const mod = await import(path).catch((e) => {
     throw new Error(`wt.config: не удалось загрузить ${path}: ${(e as Error).message}`);
   });
