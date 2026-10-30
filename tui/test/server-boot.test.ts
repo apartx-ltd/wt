@@ -195,3 +195,17 @@ test("ensureServer targets 127.0.0.1, the default bind host", async () => {
     if (saved !== undefined) process.env.WT_SERVER_HOST = saved;
   }
 });
+
+test("a v4 daemon (bound to all interfaces, no cross-origin guard) is replaced, not reused", async () => {
+  let killed = false;
+  let fresh = false;
+  const deps = currentDeps({
+    fetchVersion: async () => (fresh ? WT_PROTOCOL_VERSION : 4),
+    isWtServer: async () => true,
+    killPort: async () => { killed = true; },
+    spawnServer: () => { fresh = true; return undefined; },
+  });
+  const res = await ensureServer(OPTS, deps);
+  expect(killed).toBe(true);
+  expect(res.replaced).toBe(true);
+});

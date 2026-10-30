@@ -11,8 +11,11 @@
  * v4: spawned `wt` subprocesses no longer inherit the daemon's `PORT` (it leaked into
  * host-process starts → "Can't listen on port 4499"). Behaviour-only, but the bump
  * replaces stale v3 servers so the fix actually takes effect on the next `wt tui`/`web`.
+ *
+ * v5: the daemon binds 127.0.0.1 by default and refuses cross-origin writes. The bump
+ * replaces a v4 daemon still listening on all interfaces without that guard.
  */
-export const WT_PROTOCOL_VERSION = 4;
+export const WT_PROTOCOL_VERSION = 5;
 
 export type RunStatus = "up" | "down" | "building";
 
