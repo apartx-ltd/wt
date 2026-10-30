@@ -16,6 +16,7 @@ First public release. Extracted from the apartx orchestrator (`tools/wt`, 2026-0
 - Disk housekeeping: `wt sweep` removes worktrees of merged branches, `wt slim` removes
   restorable dependencies and volumes of stopped worktrees.
 - Full-screen terminal dashboard (`wt ui`) and a web dashboard (`wt web`) backed by a local
-  wt-server.
+  wt-server that binds `127.0.0.1` by default and rejects cross-origin writes
+  (`WT_SERVER_HOST` opts into LAN exposure).
 - Bundled stack plugins `@apartx/wt/plugin-node` and `@apartx/wt/plugin-meteor`; single-repo
   and multi-repo workspaces; `wt.config.ts` loads without `node_modules` in the workspace.
