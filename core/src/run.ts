@@ -13,7 +13,7 @@ export interface RunState {
   pid: number | null;
   container: string | null;
   started: number;
-  /** host-инстанс запущен в своей process-group (kill -- -PGID при stop). */
+  /** the host instance runs in its own process group (kill -- -PGID on stop). */
   pgroup: boolean;
 }
 
@@ -23,7 +23,7 @@ const toNum = (v: string | undefined): number | null => {
   return Number.isNaN(n) ? null : n;
 };
 
-/** Разбор `.run` (k=v строки). null если файла нет. Паритет с read_run(). */
+/** Parse a `.run` file (k=v lines). null if the file is missing. Parity with read_run(). */
 export async function parseRunState(file: string): Promise<RunState | null> {
   const f = Bun.file(file);
   if (!(await f.exists())) return null;
@@ -56,7 +56,7 @@ export interface RunStateWrite {
   pgroup?: boolean;
 }
 
-/** Содержимое `.run`-файла. Паритет с блоками `{ echo … } > rf` в cmd_start (порядок ключей важен). */
+/** Contents of a `.run` file. Parity with the `{ echo … } > rf` blocks in cmd_start (key order matters). */
 export function formatRunState(rs: RunStateWrite): string {
   const lines = rs.container
     ? [`container=${rs.container}`, `port=${rs.port}`, `branch=${rs.branch}`, `started=${rs.started}`, `project=${rs.project}`, `slug=${rs.slug}`]
@@ -71,8 +71,8 @@ export type StopAction =
   | { kind: "cleanup" };
 
 /**
- * Что делать при `wt stop`: контейнер (docker rm -f, всегда), либо живой host-pid
- * (kill_tree), либо просто подчистить runfile. Паритет с cmd_stop.
+ * What to do on `wt stop`: a container (docker rm -f, always), or a live host pid
+ * (kill_tree), or just clean up the runfile. Parity with cmd_stop.
  */
 export function stopDecision(rs: RunState, alive: boolean): StopAction {
   if (rs.container) return { kind: "container", container: rs.container };
@@ -85,7 +85,7 @@ export interface AliveProbes {
   pidAlive: (pid: number) => boolean;
 }
 
-/** Жив ли инстанс: контейнер→docker, иначе pid. Паритет с inst_alive(). */
+/** Whether the instance is alive: container → docker, otherwise pid. Parity with inst_alive(). */
 export async function isInstanceAlive(rs: RunState, probes: AliveProbes): Promise<boolean> {
   if (rs.container) return probes.dockerRunning(rs.container);
   if (rs.pid !== null) return probes.pidAlive(rs.pid);
@@ -112,7 +112,7 @@ export const defaultProbes: AliveProbes = {
   },
 };
 
-/** Живые инстансы из `<orch>/var/run/*.run`. Паритет с `wt ps --json`. */
+/** Live instances from `<orch>/var/run/*.run`. Parity with `wt ps --json`. */
 export async function listRunningInstances(
   orch: string,
   probes: AliveProbes = defaultProbes,
@@ -144,9 +144,9 @@ export async function listRunningInstances(
 }
 
 export interface StopActions {
-  /** docker rm -f <container> (no-op если не запущен); кидает, если контейнер остался. */
+  /** docker rm -f <container> (no-op if not running); throws if the container is still there. */
   dockerRm: (container: string) => Promise<void>;
-  /** kill_tree: pgroup → TERM группе, 10с, затем KILL; иначе TERM процессу. */
+  /** kill_tree: pgroup → TERM to the group, 10s, then KILL; otherwise TERM to the process. */
   killTree: (pid: number, pgroup: boolean) => Promise<void>;
 }
 
@@ -185,7 +185,7 @@ export interface StopOutcome {
   action: StopAction["kind"];
   container: string | null;
   pid: number | null;
-  /** Причина неудачи; null — инстанс снят. При ошибке runfile НЕ удаляется. */
+  /** Failure reason; null — the instance is down. On error the runfile is NOT removed. */
   error: string | null;
 }
 
@@ -198,15 +198,15 @@ async function applyStop(file: string, probes: AliveProbes, actions: StopActions
     if (decision.kind === "container") await actions.dockerRm(decision.container);
     else if (decision.kind === "pid") await actions.killTree(decision.pid, decision.pgroup);
   } catch (e) {
-    // Инстанс не снят — runfile оставляем, иначе он исчезнет из `wt ps`/`wt stop --all`,
-    // а осиротевший контейнер потом сломает `wt start` (docker run → 125, имя занято).
+    // The instance is not down — keep the runfile, otherwise it vanishes from `wt ps`/`wt stop --all`,
+    // and the orphaned container later breaks `wt start` (docker run → 125, name already in use).
     return { ...base, error: e instanceof Error ? e.message : String(e) };
   }
   await unlink(file).catch(() => {});
   return { ...base, error: null };
 }
 
-/** `wt stop <p> <slug>`: остановить инстанс + убрать runfile. null если runfile нет. Паритет cmd_stop. */
+/** `wt stop <p> <slug>`: stop the instance + remove the runfile. null if there is no runfile. Parity with cmd_stop. */
 export async function stopInstance(
   orch: string,
   project: string,
@@ -217,7 +217,7 @@ export async function stopInstance(
   return applyStop(runFilePath(orch, project, slug), probes, actions);
 }
 
-/** `wt stop --all`: остановить все инстансы из `var/run/*.run`. Паритет cmd_stop --all. */
+/** `wt stop --all`: stop every instance from `var/run/*.run`. Parity with cmd_stop --all. */
 export async function stopAll(
   orch: string,
   probes: AliveProbes = defaultProbes,
@@ -239,7 +239,7 @@ export async function stopAll(
 }
 
 export interface ReapActions {
-  /** docker ps -aq --filter name=wtdev- → список id/имён dev-контейнеров. */
+  /** docker ps -aq --filter name=wtdev- → ids/names of the dev containers. */
   listDevContainers: () => Promise<string[]>;
   /** docker rm -f <ids…>. */
   removeContainers: (ids: string[]) => Promise<void>;
@@ -251,8 +251,8 @@ const defaultReapActions: ReapActions = {
 };
 
 /**
- * `wt reap`: снести ВСЕ dev-контейнеры wtdev-* + подчистить их runfiles
- * (гарантированная зачистка сирот). Паритет cmd_reap.
+ * `wt reap`: remove ALL wtdev-* dev containers + clean up their runfiles
+ * (a guaranteed orphan sweep). Parity with cmd_reap.
  */
 export async function reapContainers(
   orch: string,
@@ -277,8 +277,8 @@ export async function reapContainers(
 export type LogSource = { kind: "docker"; container: string } | { kind: "file"; path: string };
 
 /**
- * Откуда читать логи `wt logs <p> <slug>`: контейнер (docker logs) если инстанс
- * dockerized, иначе host-logfile если он есть. null если ни того, ни другого. Паритет cmd_logs.
+ * Where `wt logs <p> <slug>` reads logs from: the container (docker logs) if the instance is
+ * dockerized, otherwise the host logfile if it exists. null if neither. Parity with cmd_logs.
  */
 export async function resolveLogSource(orch: string, project: string, slug: string): Promise<LogSource | null> {
   const rs = await parseRunState(runFilePath(orch, project, slug));
@@ -289,15 +289,15 @@ export async function resolveLogSource(orch: string, project: string, slug: stri
 }
 
 /**
- * Одноразовая идемпотентная миграция артефактов базового checkout: переименование
- * `var/{run,settings,env}/<project>-main.<ext>` → `-base.<ext>` после ренейма
- * MAIN_SLUG→BASE_SLUG (M2.5). Совпадение по сегменту слуга `-main.` (имена проектов
- * содержат дефисы, но слуг — последний сегмент перед расширением). Не клоббрит:
- * если `-base.<ext>` уже есть, `-main.<ext>` оставляется. Также пропускает артефакты
- * настоящего feature-worktree со слугом "main" (`wt new <p> main` — слуг "main" не
- * зарезервирован, только "base"): если `worktrees/<project>/main` существует, это реальный
- * worktree, а не sentinel базового checkout (у которого worktree-директории НЕТ) —
- * такой `-main.*` не трогаем. Возвращает имена перемещённых файлов.
+ * One-off idempotent migration of the base checkout's artifacts: rename
+ * `var/{run,settings,env}/<project>-main.<ext>` → `-base.<ext>` after the
+ * MAIN_SLUG→BASE_SLUG rename (M2.5). Matches on the `-main.` slug segment (project names
+ * contain dashes, but the slug is the last segment before the extension). Does not clobber:
+ * if `-base.<ext>` already exists, `-main.<ext>` is left alone. It also skips the artifacts of
+ * a real feature worktree with the slug "main" (`wt new <p> main` — the slug "main" is not
+ * reserved, only "base" is): if `worktrees/<project>/main` exists, it is a real
+ * worktree, not the base checkout sentinel (which has NO worktree directory) —
+ * such a `-main.*` is left untouched. Returns the names of the moved files.
  */
 export async function migrateBaseSlugArtifacts(orch: string): Promise<string[]> {
   const dirs = [runDir(orch), resolve(orch, "var", "settings"), resolve(orch, "var", "env")];
@@ -307,9 +307,9 @@ export async function migrateBaseSlugArtifacts(orch: string): Promise<string[]> 
     for (const f of await readdir(dir)) {
       const m = f.match(/^(.+)-main(\..+)$/);
       if (!m) continue;
-      if (existsSync(worktreeDir(orch, m[1], "main"))) continue; // реальный feature/main worktree — не трогаем
+      if (existsSync(worktreeDir(orch, m[1], "main"))) continue; // a real feature/main worktree — leave it alone
       const target = `${m[1]}-base${m[2]}`;
-      if (existsSync(resolve(dir, target))) continue; // не клоббрить
+      if (existsSync(resolve(dir, target))) continue; // do not clobber
       await rename(resolve(dir, f), resolve(dir, target));
       moved.push(f);
     }
@@ -317,7 +317,7 @@ export async function migrateBaseSlugArtifacts(orch: string): Promise<string[]> 
   return moved;
 }
 
-/** Все host-logfile'ы (по одному `.log` на каждый `.run`). Паритет cmd_logs --all. */
+/** All host logfiles (one `.log` per `.run`). Parity with cmd_logs --all. */
 export async function listLogFiles(orch: string): Promise<string[]> {
   const dir = runDir(orch);
   let files: string[];

@@ -1,13 +1,13 @@
 import type { ResolvedProjectConfig } from "./config";
 
 /**
- * Версия контракта StackPlugin↔core. Бамп — при несовместимом изменении интерфейса
- * (новое обязательное поле/смена семантики ctx). loadPlugin отказывает плагину с другой
- * версией: при OSS обновление ядра не должно молча ломать сторонний плагин.
+ * Version of the StackPlugin↔core contract. Bump it on an incompatible interface change
+ * (a new required field / changed ctx semantics). loadPlugin rejects a plugin with a different
+ * version: as OSS, a core update must not silently break a third-party plugin.
  */
 export const PLUGIN_API_VERSION = 1;
 
-/** Команда, которую ИСПОЛНЯЕТ ядро (плагин только описывает). */
+/** A command the core EXECUTES (the plugin only describes it). */
 export interface Command {
   argv: string[];
   cwd?: string;
@@ -15,21 +15,21 @@ export interface Command {
 }
 
 /**
- * Дескриптор детерминированного доп-порта. Плагин даёт базу и (опц.) env-ключ
- * переопределения; ЯДРО аллоцирует конкретный порт (база + индекс проекта среди
- * dockerized + worktree-offset) и кладёт в ctx.extraPorts[name]. Имя стека (hmr,
- * RSPACK_DEVSERVER_PORT, 8085) живёт здесь, в плагине, не в ядре.
+ * Descriptor of a deterministic aux port. The plugin provides the base and (optionally) an env key
+ * that overrides it; the CORE allocates the concrete port (base + the project's index among the
+ * dockerized ones + worktree offset) and puts it into ctx.extraPorts[name]. Stack-specific names (hmr,
+ * RSPACK_DEVSERVER_PORT, 8085) live here, in the plugin, not in the core.
  */
 export interface ExtraPortSpec {
-  /** ключ в ctx.extraPorts (meteor: "hmr"). */
+  /** key in ctx.extraPorts (meteor: "hmr"). */
   name: string;
-  /** детерминированная база, когда envKey не задан в .env (meteor: 8085). */
+  /** deterministic base when envKey is not set in .env (meteor: 8085). */
   basePort: number;
-  /** опц. env-ключ переопределения базы из <projectDir>/.env (meteor: "RSPACK_DEVSERVER_PORT"). */
+  /** optional env key overriding the base, read from <projectDir>/.env (meteor: "RSPACK_DEVSERVER_PORT"). */
   envKey?: string;
 }
 
-/** Базовый контекст: всё, что ядро знает о (project, slug) до запуска. */
+/** Base context: everything the core knows about (project, slug) before launch. */
 export interface PluginCtx {
   orch: string;
   project: string;
@@ -40,62 +40,62 @@ export interface PluginCtx {
   config: ResolvedProjectConfig;
 }
 
-/** Контекст создания worktree (`wt new`): порты ещё не нужны. */
+/** Worktree creation context (`wt new`): ports are not needed yet. */
 export type WorktreeCtx = PluginCtx;
 
-/** Контекст запущенного инстанса: порты посчитаны, имя контейнера известно. */
+/** Context of a running instance: ports are computed, the container name is known. */
 export interface InstanceCtx extends PluginCtx {
   port: number;
   offset: number;
   container: string;
-  /** режим запуска — определяет, как плагин выражает порт и синтаксис флагов. */
+  /** launch mode — determines how the plugin expresses the port and the flag syntax. */
   mode: "host" | "docker";
-  /** путь к settings-файлу для devCommand (ядро вычисляет per-mode: host=абс/репо, docker=".wt-settings.json"); null если нет. */
+  /** path to the settings file for devCommand (the core computes it per mode: host=absolute/repo, docker=".wt-settings.json"); null if none. */
   settingsPath?: string | null;
-  /** доп-порты по именам из plugin.extraPorts (ядро посчитало детерминированно). */
+  /** aux ports keyed by the names from plugin.extraPorts (computed deterministically by the core). */
   extraPorts: Record<string, number>;
 }
 
-/** Контекст генерации env-строк. */
+/** Context for generating env lines. */
 export interface EnvCtx extends InstanceCtx {}
 
-/** Контекст сидинга isolated-db. */
+/** Context for seeding an isolated DB. */
 export interface SeedCtx extends InstanceCtx {
-  /** базовый URL БД (из urlEnvKey в .env проекта). */
+  /** base DB URL (from urlEnvKey in the project's .env). */
   baseDbUrl: string;
-  /** целевой изолированный URL (deriveUrl(baseDbUrl, suffix)). */
+  /** target isolated URL (deriveUrl(baseDbUrl, suffix)). */
   isolatedDbUrl: string;
-  /** исполнитель команд от ядра (seam): плагин строит argv, ядро запускает. */
+  /** command executor provided by the core (seam): the plugin builds argv, the core runs it. */
   run(argv: string[]): Promise<void>;
 }
 
 /**
- * Контракт адаптера стека. Плагин ОПИСЫВАЕТ (argv/строки/url), ядро ИСПОЛНЯЕТ.
- * См. design.md → StackPlugin.
+ * Stack adapter contract. The plugin DESCRIBES (argv/lines/url), the core EXECUTES.
+ * See design.md → StackPlugin.
  */
 export interface StackPlugin {
   name: string;
   /**
-   * Версия контракта, на который собран плагин. Обязательна при загрузке через loadPlugin
-   * (бандл-плагины её ставят); тип опционален лишь чтобы инлайновые тест-фейки, минующие
-   * loadPlugin, компилировались. Несовпадение с PLUGIN_API_VERSION ⇒ loadPlugin кидает.
+   * Contract version the plugin was built against. Required when loading through loadPlugin
+   * (bundled plugins set it); the type is optional only so that inline test fakes that bypass
+   * loadPlugin still compile. A mismatch with PLUGIN_API_VERSION ⇒ loadPlugin throws.
    */
   apiVersion?: number;
-  /** "dotenvx" → ядро оборачивает devCommand в dotenvx-цепочку; "inline" (дефолт) → env-словарём. */
+  /** "dotenvx" → the core wraps devCommand in a dotenvx chain; "inline" (default) → as an env map. */
   envInjection?: "dotenvx" | "inline";
   install(ctx: WorktreeCtx): Command;
-  /** каталоги worktree (отн. корня), которые восстанавливают install/сборка — их сносит `wt slim`. */
+  /** worktree directories (relative to its root) that install/build restores — `wt slim` removes them. */
   artifactDirs?: string[];
   devCommand(ctx: InstanceCtx): Command;
   envLines?(ctx: EnvCtx): string[];
-  /** статические строки в конец `.env.worktree` (после ROOT_URL); пусто ⇒ ничего. */
+  /** static lines appended to `.env.worktree` (after ROOT_URL); empty ⇒ nothing. */
   worktreeEnvTail?(ctx: WorktreeCtx): string[];
-  /** доп-порты: ядро аллоцирует по одному на каждый spec (→ ctx.extraPorts[spec.name]). */
+  /** aux ports: the core allocates one per spec (→ ctx.extraPorts[spec.name]). */
   extraPorts?: ExtraPortSpec[];
   resolveBasePort?(projectDir: string): Promise<number | null>;
   settingsFile?(ctx: InstanceCtx): string;
   isolatedDb?: {
-    /** env-ключ, держащий БД-URL (meteor: "MONGO_URL"). */
+    /** env key holding the DB URL (meteor: "MONGO_URL"). */
     urlEnvKey: string;
     deriveUrl(baseUrl: string, suffix: string): string;
     seed?(ctx: SeedCtx): Promise<void>;
@@ -104,21 +104,21 @@ export interface StackPlugin {
     mounts: string[];
     addHosts?: string[];
     ownedVolumes?: string[];
-    /** статические `-e KEY=VALUE` для `docker run` (порядок вставки сохраняется). */
+    /** static `-e KEY=VALUE` for `docker run` (insertion order is preserved). */
     env?: Record<string, string>;
-    /** per-line трансформ merged-env ПОСЛЕ generic localhost→host remap ядра. */
+    /** per-line transform of the merged env applied AFTER the core's generic localhost→host remap. */
     envLineFilter?: (line: string) => string;
   };
 }
 
 /**
- * `envLineFilter` для Mongo-URL: дописывает `directConnection=true`.
+ * `envLineFilter` for Mongo URLs: appends `directConnection=true`.
  *
- * Dev-Mongo поднят как replica set, поэтому драйвер после seed-хоста берёт адреса из
- * конфига реплики — а там `127.0.0.1`, который внутри контейнера указывает на сам
- * контейнер (ECONNREFUSED). `directConnection` выключает discovery и оставляет драйвер
- * на том хосте, что в URL. Нужен любому dockerized-стеку, ходящему в общий dev-Mongo,
- * поэтому живёт в ядре, а не в отдельном плагине.
+ * The dev Mongo runs as a replica set, so after the seed host the driver takes addresses from
+ * the replica set config — and that says `127.0.0.1`, which inside a container points to the
+ * container itself (ECONNREFUSED). `directConnection` disables discovery and keeps the driver
+ * on the host given in the URL. Any dockerized stack talking to the shared dev Mongo needs it,
+ * which is why it lives in the core rather than in a specific plugin.
  */
 export const mongoDirectConnectionFilter = (line: string): string =>
   /^MONGO(_OPLOG)?_URL=mongodb/.test(line) && !line.includes("directConnection=")
@@ -127,14 +127,14 @@ export const mongoDirectConnectionFilter = (line: string): string =>
 
 const REGISTRY = new Map<string, StackPlugin>();
 
-/** Зарегистрировать бандл-плагин под именем пакета. Вызывается из bootstrap'а (Task 11) и тестов. */
+/** Register a bundled plugin under its package name. Called from the bootstrap (Task 11) and tests. */
 export function registerPlugin(name: string, plugin: StackPlugin): void {
   REGISTRY.set(name, plugin);
 }
 
 /**
- * Прежние приватные workspace-имена плагинов → публичные specifier'ы. Старое имя не
- * резолвится молча: конфиг пользователя должен быть обновлён явно.
+ * Former private workspace plugin names → public specifiers. An old name is not
+ * resolved silently: the user's config has to be updated explicitly.
  */
 const LEGACY_PLUGIN_IDS: Record<string, string> = {
   "@wt/plugin-meteor": "@apartx/wt/plugin-meteor",
@@ -142,17 +142,18 @@ const LEGACY_PLUGIN_IDS: Record<string, string> = {
 };
 
 /**
- * Загрузить плагин по имени пакета. Сейчас — только из реестра бандл-плагинов
- * (M0–M3); npm-резолв — открытый вопрос M4 (design.md).
+ * Load a plugin by package name. For now only from the bundled-plugin registry
+ * (M0–M3); npm resolution is an open M4 question (design.md).
  */
 export async function loadPlugin(name: string): Promise<StackPlugin> {
-  const renamed = LEGACY_PLUGIN_IDS[name];
+  // Own-property check: a plain-object lookup would hit Object.prototype ("constructor", …).
+  const renamed = Object.hasOwn(LEGACY_PLUGIN_IDS, name) ? LEGACY_PLUGIN_IDS[name] : undefined;
   if (renamed) throw new Error(`plugin: "${name}" was renamed to "${renamed}" — update "plugin" in wt.config.ts`);
   const p = REGISTRY.get(name);
-  if (!p) throw new Error(`plugin: неизвестный плагин: ${name} (зарегистрированы: ${[...REGISTRY.keys()].join(", ") || "—"})`);
+  if (!p) throw new Error(`plugin: unknown plugin: ${name} (registered: ${[...REGISTRY.keys()].join(", ") || "—"})`);
   if (p.apiVersion !== PLUGIN_API_VERSION) {
     throw new Error(
-      `plugin: ${name} несовместим: apiVersion=${p.apiVersion ?? "не задан"}, ядру нужен ${PLUGIN_API_VERSION}`,
+      `plugin: ${name} is incompatible: apiVersion=${p.apiVersion ?? "not set"}, the core requires ${PLUGIN_API_VERSION}`,
     );
   }
   return p;

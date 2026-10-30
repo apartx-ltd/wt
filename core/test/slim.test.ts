@@ -7,27 +7,27 @@ const base: SlimFacts = {
   volumes: ["wtdev-apartx-cabinet-ai-title-node_modules"],
 };
 
-test("остановлен, есть каталоги и тома → slim", () => {
+test("stopped, has directories and volumes → slim", () => {
   expect(classifySlim(base)).toEqual({ action: "slim", reason: "slim" });
 });
 
-test("запущен → skip running, даже с артефактами", () => {
+test("running → skip running, even with artifacts", () => {
   expect(classifySlim({ ...base, running: true })).toEqual({ action: "skip", reason: "running" });
 });
 
-test("только тома (host-каталогов нет) → slim", () => {
+test("volumes only (no host directories) → slim", () => {
   expect(classifySlim({ ...base, dirs: [] })).toEqual({ action: "slim", reason: "slim" });
 });
 
-test("только host-каталоги (не dockerized) → slim", () => {
+test("host directories only (not dockerized) → slim", () => {
   expect(classifySlim({ ...base, volumes: [] })).toEqual({ action: "slim", reason: "slim" });
 });
 
-test("нечего сносить → skip clean", () => {
+test("nothing to remove → skip clean", () => {
   expect(classifySlim({ ...base, dirs: [], volumes: [] })).toEqual({ action: "skip", reason: "clean" });
 });
 
-test("сироты: wtdev-тома, которых нет среди томов существующих worktree и base", () => {
+test("orphans: wtdev volumes absent from the volumes of existing worktrees and base", () => {
   const owned = new Set([
     "wtdev-apartx-server-base-node_modules",
     "wtdev-apartx-server-ai-tasks-node_modules",

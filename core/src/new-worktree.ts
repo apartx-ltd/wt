@@ -17,23 +17,23 @@ import {
   envFilePath,
 } from "./paths";
 
-/** Базовый slug = базовый checkout (projects/<p>), зарезервирован — не worktree. */
+/** The base slug = the base checkout (projects/<p>); reserved — not a worktree. */
 export const BASE_SLUG = "base";
 
-/** Запустить команду со стримингом stdio; кинуть при ненулевом коде. */
+/** Run a command with streamed stdio; throw on a non-zero exit code. */
 async function sh(cmd: string[], cwd?: string): Promise<void> {
   const proc = Bun.spawn(cmd, { cwd, stdout: "inherit", stderr: "inherit", stdin: "inherit" });
   const code = await proc.exited;
-  if (code !== 0) throw new Error(`команда завершилась с кодом ${code}: ${cmd.join(" ")}`);
+  if (code !== 0) throw new Error(`command exited with code ${code}: ${cmd.join(" ")}`);
 }
 
-/** true если команда завершилась с кодом 0 (вывод подавлен). */
+/** true if the command exited with code 0 (output suppressed). */
 async function shOk(cmd: string[], cwd?: string): Promise<boolean> {
   const proc = Bun.spawn(cmd, { cwd, stdout: "ignore", stderr: "ignore" });
   return (await proc.exited) === 0;
 }
 
-/** Добавить `.env.worktree` в `<git-common-dir>/info/exclude` (паритет worktree-env.sh). */
+/** Add `.env.worktree` to `<git-common-dir>/info/exclude` (parity with worktree-env.sh). */
 async function addInfoExclude(worktreeDir: string): Promise<void> {
   const proc = Bun.spawn(["git", "-C", worktreeDir, "rev-parse", "--git-common-dir"], {
     stdout: "pipe",
@@ -52,17 +52,17 @@ export interface ComputedWorktreeEnv {
   offset: number;
   port: number;
   content: string;
-  /** true если ветки ещё нет в ledger (offset только что выделен, не записан). */
+  /** true if the branch is not in the ledger yet (offset just allocated, not written). */
   isNew: boolean;
-  /** true если ветка была в ledger, но её порт занят системой и она переехала на новый offset. */
+  /** true if the branch was in the ledger, but its port is taken by the system and it moved to a new offset. */
   reallocated: boolean;
 }
 
 /**
- * Рассчитать `.env.worktree` для (project, branch) БЕЗ записи: базовый порт +
- * offset (существующий из ledger или следующий свободный) + содержимое. Для уже
- * известной ветки полностью read-only (offset из ledger) — годится для сверки с
- * живым worktree. `isolatedDb` добавляет MONGO_URL из base `.env` проекта.
+ * Compute `.env.worktree` for (project, branch) WITHOUT writing it: base port +
+ * offset (the existing one from the ledger or the next free one) + contents. For an already
+ * known branch it is fully read-only (offset from the ledger) — suitable for comparing against
+ * a live worktree. `isolatedDb` adds MONGO_URL from the project's base `.env`.
  */
 export async function computeWorktreeEnv(
   orch: string,
@@ -72,7 +72,7 @@ export async function computeWorktreeEnv(
 ): Promise<ComputedWorktreeEnv> {
   const pdir = projectDir(orch, project, await resolveProjectsDir(orch));
   const basePort = await resolveBasePort(pdir);
-  if (basePort === null) throw new Error(`не нашёл PORT в .env/package.json проекта ${project}`);
+  if (basePort === null) throw new Error(`no PORT found in .env/package.json of project ${project}`);
   const config = await resolveProjectConfig(orch, project);
   const baseRootUrl = (await readEnvValue(resolve(pdir, ".env"), "ROOT_URL")) ?? `http://localhost:${basePort}`;
 
@@ -80,19 +80,19 @@ export async function computeWorktreeEnv(
   const existingRow = ledger.find((r) => r.project === project && r.branch === branch);
   const isNew = !existingRow;
   const offset = allocateOffset(ledger, project, branch, basePort);
-  // Ветка уже была в ledger, но её порт занят системой (BLOCKED_PORTS) — переезжаем.
+  // The branch was already in the ledger, but its port is taken by the system (BLOCKED_PORTS) — move it.
   const reallocated = !!existingRow && existingRow.offset !== offset;
 
   let baseMongo: string | undefined;
   if (opts.isolatedDb) {
     const m = await readEnvValue(resolve(pdir, ".env"), "MONGO_URL");
-    if (!m) throw new Error(`нет MONGO_URL= в .env проекта ${project} для --isolated-db`);
+    if (!m) throw new Error(`no MONGO_URL= in the .env of project ${project} for --isolated-db`);
     baseMongo = m;
   }
 
-  // Доп-порты — из plugin.extraPorts (generic). Аллоцируем порт только если проект
-  // dockerized ИЛИ env-override доп-порта задан явно в .env (host-mode без него — пропуск,
-  // deterministicAuxBasePort кинул бы вне dockerized-набора). Паритет с прежним hmr-кейсом.
+  // Aux ports come from plugin.extraPorts (generic). Allocate a port only if the project is
+  // dockerized OR the aux port's env override is set explicitly in .env (host mode without it — skip,
+  // deterministicAuxBasePort would throw outside the dockerized set). Parity with the former hmr case.
   const plugin = await loadPlugin(config.plugin);
   const dockerized = await resolveDockerizedProjects(orch);
   const extraPorts: Record<string, number> = {};
@@ -109,15 +109,15 @@ export async function computeWorktreeEnv(
     settingsPath: null, extraPorts,
   };
   const extraEnvLines = plugin.envLines ? plugin.envLines(envCtx) : [];
-  // Tail-строки (.env.worktree после ROOT_URL) даёт плагин (meteor: MONGO_OPLOG_URL=,
-  // MONTI_*). Изолированный <urlEnvKey>= — через тот же isolatedDb-контракт, что и --seed.
+  // Tail lines (.env.worktree after ROOT_URL) come from the plugin (meteor: MONGO_OPLOG_URL=,
+  // MONTI_*). The isolated <urlEnvKey>= goes through the same isolatedDb contract as --seed.
   const tailLines = [...(plugin.worktreeEnvTail?.(envCtx) ?? [])];
   if (opts.isolatedDb && plugin.isolatedDb && baseMongo) {
     const { urlEnvKey, deriveUrl } = plugin.isolatedDb;
     tailLines.push(`${urlEnvKey}=${deriveUrl(baseMongo, branchDbSuffix(branch))}`);
   }
-  // Проектный env из wt.config.ts — wt-managed ключи, как строки плагина. Base-checkout их не
-  // получает (у него нет .env.worktree): это и нужно для неймспейсов вроде CHATS_QUEUE_NS.
+  // Project env from wt.config.ts — wt-managed keys, just like the plugin's lines. The base checkout
+  // does not get them (it has no .env.worktree): that is exactly what namespaces like CHATS_QUEUE_NS need.
   const vars: Record<string, string> = {
     port: String(basePort + offset),
     offset: String(offset),
@@ -131,8 +131,8 @@ export async function computeWorktreeEnv(
 }
 
 /**
- * Записать `.env.worktree` в каталог worktree и (если ветка новая) дописать offset
- * в ledger. Возвращает рассчитанные значения. Паритет с worktree-env.sh.
+ * Write `.env.worktree` into the worktree directory and (if the branch is new) append the offset
+ * to the ledger. Returns the computed values. Parity with worktree-env.sh.
  */
 export async function commitWorktreeEnv(
   orch: string,
@@ -149,7 +149,7 @@ export async function commitWorktreeEnv(
   return computed;
 }
 
-/** Парсинг `.env.worktree` в Map<KEY, полная-строка> (комментарии/пустые игнор). */
+/** Parse `.env.worktree` into Map<KEY, full-line> (comments/empty lines ignored). */
 function envLinesByKey(text: string): Map<string, string> {
   const m = new Map<string, string>();
   for (const line of text.split("\n")) {
@@ -160,11 +160,11 @@ function envLinesByKey(text: string): Map<string, string> {
 }
 
 /**
- * Перегенерировать `.env.worktree`, СОХРАНИВ непра́вляемые ключи. wt-managed ключи
- * (PORT/ROOT_URL/plugin envLines/worktreeEnvTail/isolated urlEnvKey) переписываются на
- * текущие детерминированные значения; всё прочее (ручные добавления) сохраняется дословно.
- * Isolated-режим выводится из НАЛИЧИЯ urlEnvKey в текущем файле — регенерация НИКОГДА не
- * переключает isolated↔shared. Идемпотентна на канонично-сгенерированном файле.
+ * Regenerate `.env.worktree` while PRESERVING unmanaged keys. wt-managed keys
+ * (PORT/ROOT_URL/plugin envLines/worktreeEnvTail/isolated urlEnvKey) are rewritten to their
+ * current deterministic values; everything else (manual additions) is kept verbatim.
+ * Isolated mode is inferred from the PRESENCE of urlEnvKey in the current file — regeneration NEVER
+ * switches isolated↔shared. Idempotent on a canonically generated file.
  */
 export async function regenerateWorktreeEnvPreserving(
   orch: string,
@@ -209,10 +209,10 @@ export interface CreateWorktreeResult {
 }
 
 /**
- * Полный `wt new`: git worktree add (+branch) → submodule init → `meteor npm install`
- * (docker для dockerized-проектов, иначе host) → запись `.env.worktree`+ledger → info/exclude.
- * Паритет с cmd_new (scripts/wt-legacy). `--seed` делегируется плагину
- * (`plugin.isolatedDb.seed`, dump/restore исполняет ядро через `sh`).
+ * Full `wt new`: git worktree add (+branch) → submodule init → `meteor npm install`
+ * (docker for dockerized projects, host otherwise) → write `.env.worktree`+ledger → info/exclude.
+ * Parity with cmd_new (scripts/wt-legacy). `--seed` is delegated to the plugin
+ * (`plugin.isolatedDb.seed`; the core executes the dump/restore via `sh`).
  */
 export async function createWorktree(
   orch: string,
@@ -221,17 +221,17 @@ export async function createWorktree(
   opts: CreateWorktreeOpts = {},
 ): Promise<CreateWorktreeResult> {
   if (slug === BASE_SLUG)
-    throw new Error(`slug '${BASE_SLUG}' зарезервирован под базовый checkout — нельзя создать как worktree`);
-  if (opts.seed && !opts.isolatedDb) throw new Error("--seed требует --isolated-db");
+    throw new Error(`slug '${BASE_SLUG}' is reserved for the base checkout — cannot be created as a worktree`);
+  if (opts.seed && !opts.isolatedDb) throw new Error("--seed requires --isolated-db");
 
   const pdir = projectDir(orch, project, await resolveProjectsDir(orch));
-  if (!existsSync(resolve(pdir, ".git"))) throw new Error(`нет проекта: ${project} (ожидал ${pdir})`);
+  if (!existsSync(resolve(pdir, ".git"))) throw new Error(`no such project: ${project} (expected ${pdir})`);
   const dir = resolve(orch, "worktrees", project, slug);
-  if (existsSync(dir)) throw new Error(`worktree уже существует: ${dir}`);
+  if (existsSync(dir)) throw new Error(`worktree already exists: ${dir}`);
 
-  // Имя ветки и точка форка — из config.branches (M2.5). Префикс правит slug↔branch,
-  // base — стартовая точка новой ветки (apartx: "develop"), а не текущий HEAD базового
-  // checkout'а. base undefined (конфига нет) ⇒ фоллбэк на HEAD.
+  // Branch name and fork point come from config.branches (M2.5). The prefix governs slug↔branch,
+  // base is the starting point of the new branch (apartx: "develop"), not the current HEAD of the base
+  // checkout. base undefined (no config) ⇒ fall back to HEAD.
   const cfg = await loadConfig(orch, basename(orch)).catch(() => null);
   const prefix = cfg?.branches.prefix ?? "feature/";
   const base = cfg?.branches.base;
@@ -245,7 +245,7 @@ export async function createWorktree(
         : ["git", "-C", pdir, "worktree", "add", dir, "-b", branch],
   );
 
-  // git worktree add НЕ инитит сабмодули — без них Meteor падает на local packages
+  // git worktree add does NOT init submodules — without them Meteor fails on local packages
   if (existsSync(resolve(dir, ".gitmodules"))) {
     await sh(["git", "-C", dir, "submodule", "update", "--init", "--recursive"]);
   }
@@ -253,8 +253,8 @@ export async function createWorktree(
   const config = await resolveProjectConfig(orch, project);
   const plugin = await loadPlugin(config.plugin);
   const cn = containerName(project, slug);
-  // install: плагин описывает команду; ядро исполняет (host — в каталоге worktree,
-  // docker — внутри `docker run --rm` с теми же томами/образом, что и при старте).
+  // install: the plugin describes the command; the core executes it (host — in the worktree directory,
+  // docker — inside `docker run --rm` with the same volumes/image as on start).
   const installCtx: InstanceCtx = {
     orch, project, slug, branch,
     projectDir: pdir, worktreeDir: dir, config,
@@ -272,12 +272,12 @@ export async function createWorktree(
   await addInfoExclude(dir);
 
   if (opts.isolatedDb && opts.seed) {
-    // Config-driven: ключ БД-URL и derive из plugin.isolatedDb, seed исполняет ядро (sh).
+    // Config-driven: the DB-URL key and derive come from plugin.isolatedDb; the core executes the seed (sh).
     const iso = plugin.isolatedDb;
-    if (!iso?.seed) throw new Error(`plugin ${config.plugin}: нет isolatedDb.seed для --seed`);
+    if (!iso?.seed) throw new Error(`plugin ${config.plugin}: no isolatedDb.seed for --seed`);
     const baseMongo = await readEnvValue(resolve(pdir, ".env"), iso.urlEnvKey);
-    if (!baseMongo) throw new Error(`нет ${iso.urlEnvKey} в .env проекта ${project} для --seed`);
-    const isoMongo = iso.deriveUrl(baseMongo, branchDbSuffix(branch)); // цель = <db>_<suffix>, НЕ базовая БД
+    if (!baseMongo) throw new Error(`no ${iso.urlEnvKey} in the .env of project ${project} for --seed`);
+    const isoMongo = iso.deriveUrl(baseMongo, branchDbSuffix(branch)); // target = <db>_<suffix>, NOT the base DB
     await iso.seed({
       baseDbUrl: baseMongo,
       isolatedDbUrl: isoMongo,
@@ -289,15 +289,15 @@ export async function createWorktree(
 }
 
 export interface RemoveWorktreeOpts {
-  /** также удалить ветку feature/<slug> (git branch -d). */
+  /** also delete the feature/<slug> branch (git branch -d). */
   dropBranch?: boolean;
 }
 
 /**
- * `wt rm <p> <slug>`: остановить инстанс (если запущен) → для dockerized снести
- * per-worktree тома + merged env/settings → убрать run/link-артефакты → `git
- * worktree remove` (force-фоллбэк) + prune → опц. branch -d. Порт за веткой
- * остаётся в ledger (зарезервирован). Паритет cmd_rm.
+ * `wt rm <p> <slug>`: stop the instance (if running) → for dockerized, remove the
+ * per-worktree volumes + merged env/settings → remove run/link artifacts → `git
+ * worktree remove` (with a force fallback) + prune → optionally branch -d. The branch's port
+ * stays in the ledger (reserved). Parity with cmd_rm.
  */
 export async function removeWorktree(
   orch: string,
@@ -306,12 +306,12 @@ export async function removeWorktree(
   opts: RemoveWorktreeOpts = {},
 ): Promise<void> {
   if (slug === BASE_SLUG)
-    throw new Error(`базовый checkout (slug '${BASE_SLUG}') нельзя удалять через wt rm — это projects/${project}`);
+    throw new Error(`the base checkout (slug '${BASE_SLUG}') cannot be removed with wt rm — it is projects/${project}`);
   const pdir = projectDir(orch, project, await resolveProjectsDir(orch));
-  if (!existsSync(resolve(pdir, ".git"))) throw new Error(`нет проекта: ${project} (ожидал ${pdir})`);
+  if (!existsSync(resolve(pdir, ".git"))) throw new Error(`no such project: ${project} (expected ${pdir})`);
   const dir = worktreeDir(orch, project, slug);
 
-  await stopInstance(orch, project, slug); // стоп + удаление runfile (no-op если не запущен)
+  await stopInstance(orch, project, slug); // stop + remove the runfile (no-op if not running)
 
   const config = await resolveProjectConfig(orch, project);
   if (config.docker?.image) {

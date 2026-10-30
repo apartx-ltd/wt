@@ -4,18 +4,18 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 
 /**
- * Отпечаток зависимостей в корне node_modules (в томе контейнера или в каталоге host-проекта).
- * Пишется после каждой установки; `wt start` сверяет его с текущими файлами пакетов и
- * переустанавливает, если они разошлись. Без него непустой том считался годным навсегда:
- * merge develop / checkout другого коммита в worktree зависимости не трогают, и инстанс
- * тихо работал на старых версиях (svelte 5.56 в кабинете вернул тройной `landlord-main-page`).
+ * Dependency fingerprint at the root of node_modules (in the container volume or in the host project dir).
+ * Written after every install; `wt start` compares it with the current package files and
+ * reinstalls if they diverged. Without it a non-empty volume was considered good forever:
+ * merging develop / checking out another commit in a worktree does not touch dependencies, and the
+ * instance silently ran on stale versions (svelte 5.56 in the cabinet brought back a triple `landlord-main-page`).
  */
 export const DEPS_STAMP = ".wt-deps-hash";
 
-/** Файлы, по которым менеджер пакетов решает, что ставить. Отсутствующие пропускаются. */
+/** Files the package manager uses to decide what to install. Missing ones are skipped. */
 const DEPS_FILES = ["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"];
 
-/** sha256 по содержимому файлов пакетов каталога (имя входит в хеш — перенос между файлами не совпадёт). */
+/** sha256 over the contents of the directory's package files (the name is part of the hash — moving content between files won't match). */
 export async function depsHash(dir: string): Promise<string> {
   const h = createHash("sha256");
   for (const name of DEPS_FILES) {
@@ -29,35 +29,35 @@ export async function depsHash(dir: string): Promise<string> {
 }
 
 /**
- * Содержимое отпечатка: хеши ДО и ПОСЛЕ установки. npm при установке переписывает
- * package-lock.json (дрейф версии npm), а worktree потом часто откатывают
- * `git checkout -- package-lock.json` — оба состояния описывают одни и те же зависимости,
- * и ни одно не должно гонять переустановку на каждом старте.
+ * Fingerprint contents: the hashes BEFORE and AFTER the install. npm rewrites
+ * package-lock.json during install (npm version drift), and worktrees are then often reverted with
+ * `git checkout -- package-lock.json` — both states describe the same dependencies,
+ * and neither should trigger a reinstall on every start.
  */
 export function formatDepsStamp(before: string, after: string): string {
   return before === after ? `${after}\n` : `${before}\n${after}\n`;
 }
 
 export interface DepsState {
-  /** node_modules нет или он пуст (свежий том, `wt slim`). */
+  /** node_modules is missing or empty (fresh volume, `wt slim`). */
   empty: boolean;
-  /** содержимое DEPS_STAMP; null — отпечатка нет (том поставлен до появления проверки). */
+  /** contents of DEPS_STAMP; null — no fingerprint (the volume was installed before the check existed). */
   stamp: string | null;
 }
 
 export type DepsVerdict = "ok" | "empty" | "stale";
 
-/** Пусто → ставим; отпечатка нет или текущий хеш не из него → переустанавливаем. */
+/** Empty → install; no fingerprint, or the current hash is not in it → reinstall. */
 export function depsVerdict(state: DepsState, current: string): DepsVerdict {
   if (state.empty) return "empty";
   const known = (state.stamp ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
   return known.includes(current) ? "ok" : "stale";
 }
 
-/** Скрипт пробы тома: первая строка — любой элемент (пусто = том пуст), дальше — отпечаток. */
+/** Volume probe script: the first line is any entry (empty = the volume is empty), the rest is the fingerprint. */
 const PROBE_SCRIPT = `ls -A /nm 2>/dev/null | head -1; cat /nm/${DEPS_STAMP} 2>/dev/null`;
 
-/** Разобрать вывод PROBE_SCRIPT. */
+/** Parse the output of PROBE_SCRIPT. */
 export function parseVolumeProbe(out: string): DepsState {
   const [first = "", ...rest] = out.split("\n");
   const stamp = rest.join("\n").trim();
@@ -65,18 +65,18 @@ export function parseVolumeProbe(out: string): DepsState {
 }
 
 function staleNotice(where: string): void {
-  process.stderr.write(`wt: зависимости ${where} не совпадают с package.json/lock — переустанавливаю\n`);
+  process.stderr.write(`wt: dependencies in ${where} do not match package.json/lock — reinstalling\n`);
 }
 
 async function shInherit(cmd: string[], cwd?: string): Promise<void> {
   const proc = Bun.spawn(cmd, { cwd, stdout: "inherit", stderr: "inherit", stdin: "inherit" });
   const code = await proc.exited;
-  if (code !== 0) throw new Error(`команда завершилась с кодом ${code}: ${cmd.join(" ")}`);
+  if (code !== 0) throw new Error(`command exited with code ${code}: ${cmd.join(" ")}`);
 }
 
 /**
- * Установка зависимостей в том node_modules контейнера (`docker run --rm` с томами плагина)
- * и запись отпечатка в тот же том. Общая для `wt new` и `wt start`.
+ * Install dependencies into the container's node_modules volume (`docker run --rm` with the plugin's volumes)
+ * and write the fingerprint into the same volume. Shared by `wt new` and `wt start`.
  */
 export async function installDockerDeps(
   dir: string,
@@ -86,8 +86,8 @@ export async function installDockerDeps(
   installArgv: string[],
 ): Promise<void> {
   const before = await depsHash(dir);
-  // Фолбэк на дефолтную meteor-раскладку: плагин без docker() не описал тома, но
-  // сюда приходят только dockerized-проекты — монтируем хотя бы репо.
+  // Fallback to the default meteor layout: a plugin without docker() described no volumes, but
+  // only dockerized projects get here — mount at least the repo.
   const volumes = mounts.length ? mounts : [`${dir}:/opt/app`, `${container}-node_modules:/opt/app/node_modules`];
   await shInherit([
     "docker", "run", "--rm",
@@ -102,9 +102,9 @@ export async function installDockerDeps(
 }
 
 /**
- * Перед стартом dockerized-инстанса: пустой том — установка; отпечаток не сходится с
- * текущими файлами пакетов — переустановка. Тома и команда приходят от плагина
- * (`docker().mounts` / `install().argv`). Паритет ensure_deps + проверка устаревания.
+ * Before starting a dockerized instance: empty volume — install; fingerprint does not match
+ * the current package files — reinstall. Volumes and the command come from the plugin
+ * (`docker().mounts` / `install().argv`). Parity with ensure_deps + a staleness check.
  */
 export async function ensureDeps(
   dir: string,
@@ -125,7 +125,7 @@ export async function ensureDeps(
   await installDockerDeps(dir, container, image, mounts, installArgv);
 }
 
-/** Host-установка в каталоге worktree + отпечаток в его node_modules. */
+/** Host install in the worktree directory + fingerprint in its node_modules. */
 export async function installHostDeps(dir: string, installArgv: string[]): Promise<void> {
   const before = await depsHash(dir);
   await shInherit(installArgv, dir);
@@ -133,7 +133,7 @@ export async function installHostDeps(dir: string, installArgv: string[]): Promi
   await writeFile(resolve(dir, "node_modules", DEPS_STAMP), formatDepsStamp(before, await depsHash(dir)));
 }
 
-/** Host-аналог ensureDeps: нет node_modules (снёс `wt slim`) или он устарел — install плагина. */
+/** Host counterpart of ensureDeps: node_modules is missing (removed by `wt slim`) or stale — run the plugin's install. */
 export async function ensureHostDeps(dir: string, installArgv: string[]): Promise<void> {
   const nm = resolve(dir, "node_modules");
   const stampPath = resolve(nm, DEPS_STAMP);

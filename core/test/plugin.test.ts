@@ -29,7 +29,16 @@ test("loadPlugin returns a registered plugin by name", async () => {
 });
 
 test("loadPlugin throws a clear error for an unknown plugin", async () => {
-  await expect(loadPlugin("@apartx/wt/plugin-nope")).rejects.toThrow(/неизвестный плагин: @apartx\/wt\/plugin-nope/);
+  await expect(loadPlugin("@apartx/wt/plugin-nope")).rejects.toThrow(/unknown plugin: @apartx\/wt\/plugin-nope/);
+});
+
+test("loadPlugin: an Object.prototype key is an unknown plugin, not a legacy rename", async () => {
+  const err = await loadPlugin("constructor").then(
+    () => null,
+    (e: Error) => e,
+  );
+  expect(err!.message).toMatch(/unknown plugin: constructor/);
+  expect(err!.message).not.toContain("renamed");
 });
 
 const base: StackPlugin = {
@@ -47,12 +56,12 @@ test("loadPlugin accepts a current-apiVersion plugin", async () => {
 test("loadPlugin rejects a plugin without apiVersion", async () => {
   const { apiVersion, ...noVersion } = base;
   registerPlugin("@fake/none", noVersion as StackPlugin);
-  await expect(loadPlugin("@fake/none")).rejects.toThrow(/apiVersion|совместим/i);
+  await expect(loadPlugin("@fake/none")).rejects.toThrow(/apiVersion|incompatible/i);
 });
 
 test("loadPlugin rejects an incompatible apiVersion", async () => {
   registerPlugin("@fake/old", { ...base, apiVersion: PLUGIN_API_VERSION + 1 });
-  await expect(loadPlugin("@fake/old")).rejects.toThrow(/apiVersion|совместим/i);
+  await expect(loadPlugin("@fake/old")).rejects.toThrow(/apiVersion|incompatible/i);
 });
 
 test("registerBundledPlugins registers the public package-specifier ids", async () => {

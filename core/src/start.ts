@@ -30,33 +30,33 @@ import {
 } from "./run";
 
 export interface DockerRunArgs {
-  /** имя контейнера (wtdev-<p>-<slug>) */
+  /** container name (wtdev-<p>-<slug>) */
   container: string;
   port: number;
   /** merged env-file (--env-file) */
   envFile: string;
-  /** доп-порты (имя→номер) из plugin.extraPorts; каждый публикуется `-p <n>:<n>`. */
+  /** aux ports (name→number) from plugin.extraPorts; each is published as `-p <n>:<n>`. */
   extraPorts?: Record<string, number>;
-  /** bind-mounts/тома (`-v`), которые даёт plugin.docker(ctx).mounts. */
+  /** bind mounts/volumes (`-v`) provided by plugin.docker(ctx).mounts. */
   mounts: string[];
-  /** add-hosts (`--add-host`): plugin.docker(ctx).addHosts + динамический dev-host, в порядке вызова. */
+  /** add-hosts (`--add-host`): plugin.docker(ctx).addHosts + the dynamic dev host, in call order. */
   addHosts: string[];
-  /** строка `sh -c <innerCmd>` (plugin.devCommand(ctx).argv.join(" ")). */
+  /** the `sh -c <innerCmd>` string (plugin.devCommand(ctx).argv.join(" ")). */
   innerCmd: string;
-  /** docker-образ (ctx.config.docker.image). */
+  /** docker image (ctx.config.docker.image). */
   image: string;
-  /** опц. ro-mount отрендеренного settings (var/run/<p>-<slug>.settings.docker.json → /opt/app/.wt-settings.json). */
+  /** optional ro mount of the rendered settings (var/run/<p>-<slug>.settings.docker.json → /opt/app/.wt-settings.json). */
   settingsMount?: string | null;
-  /** статические `-e KEY=VALUE`, которые даёт plugin.docker(ctx).env (порядок вставки, перед generic NODE_OPTIONS). */
+  /** static `-e KEY=VALUE` provided by plugin.docker(ctx).env (insertion order, before the generic NODE_OPTIONS). */
   dockerEnv?: Record<string, string>;
 }
 
 /**
- * argv для `docker run` dockerized-инстанса (после слова `docker`). Ядро добавляет
- * generic-флаги (`-d --name`, форс-поллинг hot-reload, ipv4first DNS, проброс
- * основного порта + по одному на каждый extraPort, env-file); add-hosts, тома,
- * образ и inner-cmd приходят от плагина (plugin.docker / plugin.devCommand).
- * Паритет с блоком `docker run -d --name …` в cmd_start.
+ * argv for `docker run` of a dockerized instance (after the word `docker`). The core adds the
+ * generic flags (`-d --name`, forced hot-reload polling, ipv4first DNS, publishing the
+ * main port + one per extraPort, env-file); add-hosts, volumes,
+ * image and inner-cmd come from the plugin (plugin.docker / plugin.devCommand).
+ * Parity with the `docker run -d --name …` block in cmd_start.
  */
 export function buildDockerRunArgs(a: DockerRunArgs): string[] {
   const args = ["run", "-d", "--name", a.container];
@@ -75,10 +75,10 @@ export function buildDockerRunArgs(a: DockerRunArgs): string[] {
 }
 
 /**
- * docker-env для контейнера с учётом базового checkout'а. База (slug "base") не имеет
- * `.env.worktree`, несущего HMR/extra env → инжектим plugin.envLines (offset 0 ⇒
- * детерминированный base HMR) как `-e`. Worktree получает их из env-file (renderEnvFile),
- * поэтому для них envLines НЕ добавляем — docker-argv worktree остаётся без изменений.
+ * docker env for the container, accounting for the base checkout. The base (slug "base") has no
+ * `.env.worktree` carrying the HMR/extra env → inject plugin.envLines (offset 0 ⇒
+ * deterministic base HMR) as `-e`. Worktrees get them from the env-file (renderEnvFile),
+ * so envLines are NOT added for them — a worktree's docker argv stays unchanged.
  */
 export function baseCheckoutDockerEnv(
   slug: string,
@@ -96,9 +96,9 @@ export function baseCheckoutDockerEnv(
 }
 
 /**
- * Remap одной env-строки для контейнера: `localhost`/`127.0.0.1`→host (КРОМЕ ROOT_URL).
- * Стек-специфичные правки (напр. mongo directConnection) даёт plugin.docker().envLineFilter,
- * который ядро применяет ПОСЛЕ generic-remap. Паритет sed+awk в render_env_file.
+ * Remap one env line for the container: `localhost`/`127.0.0.1`→host (EXCEPT ROOT_URL).
+ * Stack-specific tweaks (e.g. mongo directConnection) come from plugin.docker().envLineFilter,
+ * which the core applies AFTER the generic remap. Parity with the sed+awk in render_env_file.
  */
 export function remapEnvLine(line: string, host: string, filter?: (l: string) => string): string {
   let l = line;
@@ -107,9 +107,9 @@ export function remapEnvLine(line: string, host: string, filter?: (l: string) =>
 }
 
 /**
- * Deep-remap host'ов в settings-объекте: `localhost`/`127.0.0.1`→host во всех
- * строковых листьях КРОМЕ поддерева `public` (оно уходит в браузер as-is). Паритет
- * node-walk в docker_settings.
+ * Deep-remap hosts in a settings object: `localhost`/`127.0.0.1`→host in all
+ * string leaves EXCEPT the `public` subtree (it goes to the browser as-is). Parity with the
+ * node walk in docker_settings.
  */
 export function remapSettingsHosts(node: unknown, host: string, inPublic = false): unknown {
   if (Array.isArray(node)) return node.map((v) => remapSettingsHosts(v, host, inPublic));
@@ -126,20 +126,20 @@ export function remapSettingsHosts(node: unknown, host: string, inPublic = false
 }
 
 export interface HostMeteorArgs {
-  /** абсолютный путь base `.env` проекта */
+  /** absolute path of the project's base `.env` */
   baseEnv: string;
-  /** `.env.worktree` присутствует (относительный, cwd = worktree) */
+  /** `.env.worktree` is present (relative, cwd = worktree) */
   hasWorktreeEnv: boolean;
-  /** абсолютный путь env-overlay линка (var/env/<p>-<slug>.env) или null */
+  /** absolute path of the link's env overlay (var/env/<p>-<slug>.env) or null */
   envOverlay?: string | null;
-  /** inner-команда для `sh -c` (plugin.devCommand(ctx).argv.join(" ")), напр. `meteor run --port $PORT`. */
+  /** inner command for `sh -c` (plugin.devCommand(ctx).argv.join(" ")), e.g. `meteor run --port $PORT`. */
   innerCmd: string;
 }
 
 /**
- * argv host-старта: `npx dotenvx run <fchain> -- sh -c "<innerCmd>"`. Цепочка dotenvx
- * (левый выигрывает): env-overlay → .env.worktree → base .env. innerCmd даёт плагин
- * (plugin.devCommand). Паритет meteor_cmd.
+ * argv of a host start: `npx dotenvx run <fchain> -- sh -c "<innerCmd>"`. The dotenvx chain
+ * (leftmost wins): env overlay → .env.worktree → base .env. innerCmd comes from the plugin
+ * (plugin.devCommand). Parity with meteor_cmd.
  */
 export function buildHostMeteorArgs(c: HostMeteorArgs): string[] {
   const f: string[] = [];
@@ -151,7 +151,7 @@ export function buildHostMeteorArgs(c: HostMeteorArgs): string[] {
 
 const buildLockDir = (orch: string): string => resolve(runDir(orch), ".build.lock");
 
-/** Сериализация фазы сборки (mkdir-spinlock; забор протухшего лока мёртвого владельца). Паритет acquire_build_lock. */
+/** Serializes the build phase (mkdir spinlock; takes over a stale lock of a dead owner). Parity with acquire_build_lock. */
 async function acquireBuildLock(orch: string, probes: AliveProbes): Promise<void> {
   await mkdir(runDir(orch), { recursive: true });
   const lock = buildLockDir(orch);
@@ -178,7 +178,7 @@ async function releaseBuildLock(orch: string): Promise<void> {
   await rm(buildLockDir(orch), { recursive: true, force: true }).catch(() => {});
 }
 
-/** Ждать ответа порта (сборка прошла) или смерти процесса/таймаута. Паритет wait_port_up. */
+/** Wait for the port to respond (build finished), or for the process to die / a timeout. Parity with wait_port_up. */
 export async function waitPortUp(
   port: number,
   opts: { pid?: number; deadlineMs?: number; probes?: AliveProbes } = {},
@@ -188,9 +188,9 @@ export async function waitPortUp(
   while (Date.now() < deadline) {
     try {
       await fetch(`http://localhost:${port}`, { signal: AbortSignal.timeout(3000) });
-      return true; // любой HTTP-ответ = поднялся
+      return true; // any HTTP response = up
     } catch {
-      /* нет ответа — продолжаем */
+      /* no response — keep waiting */
     }
     if (opts.pid !== undefined && !probes.pidAlive(opts.pid)) return false;
     await Bun.sleep(4000);
@@ -205,7 +205,7 @@ export async function gitBranch(dir: string): Promise<string> {
   return out;
 }
 
-/** Запустить процесс отвязанным лидером своей process-group (kill -- -PGID при stop), лог → файл. */
+/** Start a process detached, as the leader of its own process group (kill -- -PGID on stop), log → file. */
 export function spawnDetached(cmd: string, args: string[], cwd: string, logPath: string, env?: Record<string, string>): number {
   const fd = openSync(logPath, "a");
   const child = cpSpawn(cmd, args, {
@@ -213,11 +213,11 @@ export function spawnDetached(cmd: string, args: string[], cwd: string, logPath:
     env: env ? { ...process.env, ...env } : process.env,
   });
   child.unref();
-  if (!child.pid) throw new Error("не удалось запустить процесс");
+  if (!child.pid) throw new Error("failed to start the process");
   return child.pid;
 }
 
-/** mDNS-имя dev-машины (<LocalHostName>.local); null на non-mac. Паритет dev_host. */
+/** mDNS name of the dev machine (<LocalHostName>.local); null on non-mac. Parity with dev_host. */
 export async function devHost(): Promise<string | null> {
   const proc = Bun.spawn(["scutil", "--get", "LocalHostName"], { stdout: "pipe", stderr: "ignore" });
   const out = (await new Response(proc.stdout).text()).trim();
@@ -226,19 +226,19 @@ export async function devHost(): Promise<string | null> {
 }
 
 /**
- * Запустить команду со стримингом stdio; кинуть при ненулевом коде.
- * `hints` — подсказка по коду возврата: docker печатает причину в свой stderr, но она
- * тонет выше по логу, поэтому дублируем самое частое прямо в текст ошибки.
+ * Run a command with streamed stdio; throw on a non-zero exit code.
+ * `hints` — a hint per exit code: docker prints the reason to its own stderr, but it
+ * gets buried higher up in the log, so the most common one is repeated right in the error text.
  */
 export async function shInherit(cmd: string[], hints?: Record<number, string>): Promise<void> {
   const proc = Bun.spawn(cmd, { stdout: "inherit", stderr: "inherit", stdin: "inherit" });
   const code = await proc.exited;
   if (code === 0) return;
   const hint = hints?.[code];
-  throw new Error(`команда завершилась с кодом ${code}: ${cmd.join(" ")}${hint ? `\n${hint}` : ""}`);
+  throw new Error(`command exited with code ${code}: ${cmd.join(" ")}${hint ? `\n${hint}` : ""}`);
 }
 
-/** Скрейп localhost-дефолтов `process.env.X or 'scheme://…localhost…'` из исходников worktree (первый per-ключ). */
+/** Scrape localhost defaults `process.env.X or 'scheme://…localhost…'` from the worktree sources (first one per key). */
 async function scrapeLocalhostDefaults(dir: string): Promise<Map<string, string>> {
   const re = "process\\.env\\.[A-Z_0-9]+ *(or|\\|\\||\\?\\?) *['\"][a-z]+://[^'\"]*localhost[^'\"]*['\"]";
   const proc = Bun.spawn(
@@ -258,9 +258,9 @@ async function scrapeLocalhostDefaults(dir: string): Promise<Map<string, string>
 }
 
 /**
- * Отрендерить merged env-file для контейнера (`var/run/<p>-<slug>.env.merged`): dotenvx
- * из ГЛАВНОГО checkout (там node_modules/dotenvx) → отфильтровать по ключам файлов →
- * remapEnvLine → доскрейпить недостающие localhost-дефолты. Паритет render_env_file.
+ * Render the merged env-file for the container (`var/run/<p>-<slug>.env.merged`): dotenvx
+ * from the MAIN checkout (that is where node_modules/dotenvx is) → filter by the files' keys →
+ * remapEnvLine → scrape in the missing localhost defaults. Parity with render_env_file.
  */
 export async function renderEnvFile(
   orch: string,
@@ -283,7 +283,7 @@ export async function renderEnvFile(
   for (const f of files) {
     if (!existsSync(f)) continue;
     for (const line of (await readFile(f, "utf8")).split("\n")) {
-      // допускаем shell-стиль `export KEY=...` (ведущий `export ` снимается)
+      // accept shell-style `export KEY=...` (the leading `export ` is stripped)
       const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=/.exec(line);
       if (m) keys.add(m[1]!);
     }
@@ -304,21 +304,21 @@ export async function renderEnvFile(
     values.set(m[1]!, m[2]!);
   };
   for (const line of raw.split("\n")) addLine(line);
-  // dotenvx экспортирует только ключи из "главного" файла (envovr → wenv → .env).
-  // Дописываем недостающие из wenv/envovr вручную, чтобы PORT-переопределения
-  // и HMR-порты не терялись, когда их нет в base .env.
-  // Ограничение: здесь берутся сырые значения из файлов (без раскрытия ${VAR}
-  // и без снятия кавычек dotenvx). Для числовых портов/URL это безопасно.
+  // dotenvx only exports keys from the "main" file (envovr → wenv → .env).
+  // Add the missing ones from wenv/envovr by hand, so that PORT overrides
+  // and HMR ports are not lost when they are absent from the base .env.
+  // Limitation: raw values are taken from the files here (no ${VAR} expansion
+  // and no dotenvx quote stripping). For numeric ports/URLs this is safe.
   for (const f of [wenv, envovr]) {
     if (!existsSync(f)) continue;
     for (const line of (await readFile(f, "utf8")).split("\n")) addLine(line);
   }
-  // Фолбэк на сырой base `.env`: dotenvx выше мог не отработать вообще — он резолвится
-  // через `npx` и есть в node_modules только у проектов, где объявлен в зависимостях
-  // (не-Meteor стек его не тащит; stderr подавлен, так что провал молчаливый). Без этого
-  // весь конфиг проекта тихо терялся, а инстанс поднимался на одних scrape-дефолтах.
-  // Только недостающие ключи: там, где dotenvx сработал, его значения точнее (раскрытые
-  // ${VAR}, снятые кавычки).
+  // Fallback to the raw base `.env`: dotenvx above may not have run at all — it is resolved
+  // via `npx` and is in node_modules only for projects that declare it as a dependency
+  // (a non-Meteor stack does not pull it in; stderr is suppressed, so the failure is silent). Without this
+  // the project's whole config was silently lost, and the instance came up on scrape defaults alone.
+  // Only missing keys: where dotenvx did work, its values are more accurate (expanded
+  // ${VAR}, stripped quotes).
   {
     const baseEnv = resolve(pdir, ".env");
     if (existsSync(baseEnv)) {
@@ -339,7 +339,7 @@ export async function renderEnvFile(
   return out;
 }
 
-/** Отрендерить settings для контейнера (public-aware remap) → путь монтирования или null. Паритет docker_settings. */
+/** Render settings for the container (public-aware remap) → mount path or null. Parity with docker_settings. */
 export async function renderDockerSettings(orch: string, project: string, slug: string, host: string, projectsDir = "projects"): Promise<string | null> {
   const dir = slug === BASE_SLUG ? projectDir(orch, project, projectsDir) : worktreeDir(orch, project, slug);
   let src = "";
@@ -355,9 +355,9 @@ export async function renderDockerSettings(orch: string, project: string, slug: 
 }
 
 export interface StartOptions {
-  /** "all" — все апстримы потребителя; иначе имя одной цели-апстрима (фильтр). */
+  /** "all" — all upstreams of the consumer; otherwise the name of a single upstream target (filter). */
   link?: "all" | string;
-  /** slug целевых worktree'ов для линков (по умолчанию = свой slug). */
+  /** slug of the target worktrees for links (defaults to the instance's own slug). */
   linkSlug?: string;
 }
 
@@ -372,9 +372,9 @@ export interface StartResult {
 }
 
 /**
- * `wt start` (background). Общие проверки → linkи → ветвление host (detached-процесс)
- * / docker (контейнер). Паритет cmd_start. Гейтит host-сборку build-lock'ом, пишет
- * runfile, ждёт порт.
+ * `wt start` (background). Common checks → links → branch into host (detached process)
+ * / docker (container). Parity with cmd_start. Gates the host build behind the build lock, writes the
+ * runfile, waits for the port.
  */
 export async function startInstance(
   orch: string,
@@ -386,13 +386,13 @@ export async function startInstance(
   const projectsDir = await resolveProjectsDir(orch);
   const isBase = slug === BASE_SLUG;
   const dir = isBase ? projectDir(orch, project, projectsDir) : worktreeDir(orch, project, slug);
-  if (!existsSync(dir)) throw new Error(`нет worktree: ${project}/${slug} (создай: wt new ${project} ${slug})`);
+  if (!existsSync(dir)) throw new Error(`no worktree: ${project}/${slug} (create it: wt new ${project} ${slug})`);
 
   const rf = runFilePath(orch, project, slug);
   const existing = await parseRunState(rf);
   if (existing && (await isInstanceAlive(existing, probes))) {
     const who = existing.container ?? `PID ${existing.pid ?? "?"}`;
-    throw new Error(`${project}/${slug} уже запущен (${who}, порт ${existing.port ?? "?"})`);
+    throw new Error(`${project}/${slug} is already running (${who}, port ${existing.port ?? "?"})`);
   }
 
   if (!isBase) {
@@ -404,7 +404,7 @@ export async function startInstance(
   }
 
   const port = isBase ? await resolveBasePort(projectDir(orch, project, projectsDir)) : await readWorktreePort(dir);
-  if (port === null) throw new Error(`${project}/${slug}: не нашёл PORT (base .env / .env.worktree)`);
+  if (port === null) throw new Error(`${project}/${slug}: no PORT found (base .env / .env.worktree)`);
   const branch = await gitBranch(dir);
 
   const config = await resolveProjectConfig(orch, project);
@@ -413,7 +413,7 @@ export async function startInstance(
     : startHost(orch, project, slug, dir, port, branch, probes, projectsDir);
 }
 
-/** Резолв host-`--settings` (ovr → repo settings/settings.json → settings.json) или null. */
+/** Resolve the host `--settings` (ovr → repo settings/settings.json → settings.json) or null. */
 function resolveHostSettings(orch: string, project: string, slug: string, dir: string): string | null {
   if (existsSync(ovrFilePath(orch, project, slug))) return ovrFilePath(orch, project, slug);
   if (existsSync(resolve(dir, "settings", "settings.json"))) return "settings/settings.json";
@@ -422,10 +422,10 @@ function resolveHostSettings(orch: string, project: string, slug: string, dir: s
 }
 
 /**
- * Собрать `InstanceCtx` для плагина. port/offset/container/extraPorts даёт ядро;
- * settingsPath — per-mode (host: абс/репо `--settings`-путь, docker: `.wt-settings.json`
- * когда есть mount). Для host-режима offset/extraPorts не используются meteor-плагином,
- * но контекст типобезопасен.
+ * Build the `InstanceCtx` for the plugin. port/offset/container/extraPorts come from the core;
+ * settingsPath is per mode (host: absolute/repo `--settings` path, docker: `.wt-settings.json`
+ * when there is a mount). In host mode the meteor plugin does not use offset/extraPorts,
+ * but the context stays type-safe.
  */
 function buildInstanceCtx(args: {
   orch: string;
@@ -460,9 +460,9 @@ function buildInstanceCtx(args: {
 }
 
 /**
- * Host-старт argv. Плагин описывает inner-cmd (`plugin.devCommand(ctx).argv`); ядро
- * оборачивает: при `envInjection==="dotenvx"` — в dotenvx-цепочку (env-overlay → .env.worktree
- * → base .env) + `sh -c <inner>` (паритет meteor_cmd); иначе env-словарём inline.
+ * Host start argv. The plugin describes the inner cmd (`plugin.devCommand(ctx).argv`); the core
+ * wraps it: with `envInjection==="dotenvx"` — in a dotenvx chain (env overlay → .env.worktree
+ * → base .env) + `sh -c <inner>` (parity with meteor_cmd); otherwise inline as an env map.
  */
 export async function buildHostDevArgs(args: {
   orch: string;
@@ -499,8 +499,8 @@ export async function buildHostDevArgs(args: {
       env: { PORT: String(args.port) },
     };
   }
-  // inline: ядро само наслаивает env-файлы (base .env → .env.worktree → env-overlay линка;
-  // позже = выше приоритет) в словарь, плюс то, что вернул плагин в Command.env.
+  // inline: the core itself layers the env files (base .env → .env.worktree → the link's env overlay;
+  // later = higher priority) into a map, plus whatever the plugin returned in Command.env.
   const envOverlay = existsSync(envFilePath(orch, project, slug)) ? envFilePath(orch, project, slug) : null;
   const hasWtree = slug !== BASE_SLUG && existsSync(resolve(dir, ".env.worktree"));
   const layered = await mergeEnvFiles([
@@ -512,9 +512,9 @@ export async function buildHostDevArgs(args: {
 }
 
 /**
- * `wt run` (foreground, host). Те же host-args, что и `start`, но stdio наследуется и
- * процесс не отвязывается (Ctrl-C завершает). Без runfile/build-lock. Паритет cmd_run.
- * dockerized → кидает (host node_modules в томе; используй `wt start` + `wt logs -f`).
+ * `wt run` (foreground, host). The same host args as `start`, but stdio is inherited and the
+ * process is not detached (Ctrl-C ends it). No runfile/build lock. Parity with cmd_run.
+ * dockerized → throws (node_modules lives in a volume; use `wt start` + `wt logs -f`).
  */
 export async function runForeground(
   orch: string,
@@ -524,11 +524,11 @@ export async function runForeground(
 ): Promise<number> {
   const config = await resolveProjectConfig(orch, project);
   if (config.docker?.image)
-    throw new Error(`${project} — dockerized: foreground недоступен, используй: wt start ${project} ${slug} && wt logs ${project} ${slug} -f`);
+    throw new Error(`${project} is dockerized: foreground is unavailable, use: wt start ${project} ${slug} && wt logs ${project} ${slug} -f`);
   const projectsDir = await resolveProjectsDir(orch);
   const isBase = slug === BASE_SLUG;
   const dir = isBase ? projectDir(orch, project, projectsDir) : worktreeDir(orch, project, slug);
-  if (!existsSync(dir)) throw new Error(`нет worktree: ${project}/${slug} (создай: wt new ${project} ${slug})`);
+  if (!existsSync(dir)) throw new Error(`no worktree: ${project}/${slug} (create it: wt new ${project} ${slug})`);
   if (!isBase) {
     await regenerateWorktreeEnvPreserving(orch, project, await gitBranch(dir), dir);
   }
@@ -582,28 +582,28 @@ async function startDockerized(
   const plugin = await loadPlugin(config.plugin);
   const dh = await devHost();
   const host = dh ?? "host.docker.internal";
-  // Снять предыдущий контейнер (в т.ч. залипший Exited) ОБЯЗАТЕЛЬНО: иначе docker run
-  // ниже упадёт с 125 «name is already in use», и без этой проверки причина не видна.
+  // Removing the previous container (including a stuck Exited one) is MANDATORY: otherwise docker run
+  // below fails with 125 "name is already in use", and without this check the cause is invisible.
   await dockerRemove([container]);
 
-  // dockerSpec капчится один раз ДО рендера env: meteor.docker() не читает extraPorts,
-  // поэтому ctx с extraPorts:{} даёт те же mounts/addHosts/env/envLineFilter; реальные
-  // extraPorts вычисляются ниже из merged env и используются только в devCommand/buildDockerRunArgs.
+  // dockerSpec is captured once BEFORE the env is rendered: meteor.docker() does not read extraPorts,
+  // so a ctx with extraPorts:{} yields the same mounts/addHosts/env/envLineFilter; the real
+  // extraPorts are computed below from the merged env and used only in devCommand/buildDockerRunArgs.
   const specCtx = buildInstanceCtx({
     orch, project, slug, dir, branch, config,
     port, offset: 0, container, mode: "docker", settingsPath: null, extraPorts: {}, projectsDir,
   });
   const dockerSpec = plugin.docker?.(specCtx) ?? { mounts: [] };
 
-  // Установка зависимостей — после dockerSpec: и раскладка томов, и сама команда берутся
-  // у плагина (meteor → `meteor npm install` + meteor-тома, node → `npm install` без них).
+  // Dependency install comes after dockerSpec: both the volume layout and the command itself come
+  // from the plugin (meteor → `meteor npm install` + meteor volumes, node → `npm install` without them).
   await ensureDeps(dir, container, config.docker!.image, dockerSpec.mounts, plugin.install(specCtx).argv);
 
   const envFile = await renderEnvFile(orch, project, slug, host, dockerSpec.envLineFilter, projectsDir);
   const settingsMount = await renderDockerSettings(orch, project, slug, host, projectsDir);
 
-  // Доп-порты (generic): для каждого spec берём env-override из merged env, иначе
-  // dockerized-индексированную базу. offset=0 (значение уже включает offset в .env.worktree).
+  // Aux ports (generic): for each spec take the env override from the merged env, otherwise the
+  // dockerized-indexed base. offset=0 (the value in .env.worktree already includes the offset).
   const dockerized = await resolveDockerizedProjects(orch);
   const extraPorts: Record<string, number> = {};
   for (const spec of plugin.extraPorts ?? []) {
@@ -619,10 +619,10 @@ async function startDockerized(
     settingsPath: settingsMount ? ".wt-settings.json" : null,
     extraPorts, projectsDir,
   });
-  // add-hosts: статические из плагина, затем динамический dev-host (порядок текущего кода).
+  // add-hosts: the plugin's static ones, then the dynamic dev host (order of the current code).
   const addHosts = [...(dockerSpec.addHosts ?? []), ...(dh ? [`${dh}:host-gateway`] : [])];
   const innerCmd = plugin.devCommand(ctx).argv.join(" ");
-  // База (slug "base") без .env.worktree → инжектим plugin.envLines (HMR) как `-e`.
+  // The base (slug "base") has no .env.worktree → inject plugin.envLines (HMR) as `-e`.
   const dockerEnv = baseCheckoutDockerEnv(slug, dockerSpec.env, plugin.envLines?.(ctx) ?? []);
   const args = buildDockerRunArgs({
     container, port, envFile, extraPorts,
@@ -630,7 +630,7 @@ async function startDockerized(
     dockerEnv,
   });
   await shInherit(["docker", ...args], {
-    125: `docker не смог создать контейнер ${container}. Если имя занято — сними вручную: docker rm -f ${container}`,
+    125: `docker could not create container ${container}. If the name is taken, remove it manually: docker rm -f ${container}`,
   });
   await writeFile(runFilePath(orch, project, slug), formatRunState({ container, port, branch, started: Math.floor(Date.now() / 1000), project, slug }));
   const portUp = await waitPortUp(port, {});

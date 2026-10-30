@@ -37,9 +37,9 @@ export function webBuildDir(root = packageRoot()): string {
 }
 
 /**
- * Регистр как на диске: на регистронезависимой ФС `cd ~/projects/apartx` даёт ORCH со
- * строчной буквой, а git отдаёт пути worktree в настоящем регистре — префиксные сравнения
- * (listWorktrees) молча не совпадали, и `wt list`/`slim` видели 0 worktree.
+ * Case as on disk: on a case-insensitive filesystem `cd ~/projects/apartx` yields an ORCH with a
+ * lowercase letter, while git reports worktree paths in their real case — the prefix comparisons
+ * (listWorktrees) silently failed to match, and `wt list`/`slim` saw 0 worktrees.
  */
 export function canonicalPath(path: string): string {
   try {

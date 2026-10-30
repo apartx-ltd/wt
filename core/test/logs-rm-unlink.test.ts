@@ -76,7 +76,7 @@ test("removeLinks: deletes ovr + env layer files (idempotent)", async () => {
 test("removeWorktree: rejects base slug", async () => {
   const orch = mkOrch();
   try {
-    expect(removeWorktree(orch, "apartx-server", "base")).rejects.toThrow(/базовый checkout/);
+    expect(removeWorktree(orch, "apartx-server", "base")).rejects.toThrow(/base checkout/);
   } finally {
     rmSync(orch, { recursive: true, force: true });
   }
@@ -85,7 +85,7 @@ test("removeWorktree: rejects base slug", async () => {
 test("removeWorktree: rejects missing project", async () => {
   const orch = mkOrch();
   try {
-    expect(removeWorktree(orch, "ghost", "x")).rejects.toThrow(/нет проекта/);
+    expect(removeWorktree(orch, "ghost", "x")).rejects.toThrow(/no such project/);
   } finally {
     rmSync(orch, { recursive: true, force: true });
   }

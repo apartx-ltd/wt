@@ -8,10 +8,10 @@ import type { StackPlugin } from "../src/plugin";
 import type { ResolvedProjectConfig } from "../src/config";
 import { readFile } from "node:fs/promises";
 
-// Mounts/addHosts/innerCmd/image теперь даёт плагин (meteor) — ядро только склеивает
-// argv. Здесь воспроизводим тот же набор, что давал legacy inline-блок, чтобы argv
-// остался байт-в-байт (единственная допустимая дельта — одинарный пробел в inner-cmd
-// без --settings: legacy `meteor run  --port` → плагин `meteor run --port`).
+// Mounts/addHosts/innerCmd/image now come from the plugin (meteor) — the core only assembles
+// the argv. Here we reproduce the same set the legacy inline block produced, so that the argv
+// stays byte-for-byte identical (the only allowed delta is a single space in the inner cmd
+// without --settings: legacy `meteor run  --port` → plugin `meteor run --port`).
 const container = "wtdev-apartx-server-feat";
 const meteorMounts = [
   "/orch/worktrees/apartx-server/feat:/opt/app",
@@ -52,7 +52,7 @@ test("buildDockerRunArgs: core shape (no dev-host, no settings)", () => {
 });
 
 test("buildDockerRunArgs: with dev-host adds second --add-host", () => {
-  // Ядро конкатенирует addHosts плагина с динамическим dev-host (порядок сохранён).
+  // The core concatenates the plugin's addHosts with the dynamic dev host (order preserved).
   const args = buildDockerRunArgs({ ...base, addHosts: [...base.addHosts, "boomfly-m2.local:host-gateway"] });
   const i = args.indexOf("boomfly-m2.local:host-gateway");
   expect(i).toBeGreaterThan(0);
@@ -332,7 +332,7 @@ test("renderEnvFile keeps `export KEY=...` lines (shell-style .env, e.g. apartx-
     mkdirSync(pdir, { recursive: true });
     mkdirSync(wdir, { recursive: true });
     writeFileSync(resolve(pdir, ".env"), "PORT=3002\n");
-    // shell-style export lines (как у apartx-whatsapp) must survive into the merged file
+    // shell-style export lines (as in apartx-whatsapp) must survive into the merged file
     writeFileSync(resolve(wdir, ".env.worktree"), "export MONGO_URL=mongodb://localhost:27017/apartx\nexport AWS_BUCKET=b\n");
 
     const out = await renderEnvFile(orch, project, "feat", "host.docker.internal");
@@ -345,10 +345,10 @@ test("renderEnvFile keeps `export KEY=...` lines (shell-style .env, e.g. apartx-
   }
 });
 
-test("renderEnvFile отдаёт ключи base .env, даже когда dotenvx недоступен", async () => {
-  // Не-Meteor проект (apartx-help) не тащит dotenvx в зависимостях, поэтому `npx dotenvx`
-  // уходит в registry и падает — а stderr подавлен. Без сырого фолбэка на base .env весь
-  // конфиг проекта молча терялся и инстанс поднимался на одних scrape-дефолтах.
+test("renderEnvFile emits the base .env keys even when dotenvx is unavailable", async () => {
+  // A non-Meteor project (apartx-help) does not pull dotenvx into its dependencies, so `npx dotenvx`
+  // goes to the registry and fails — and stderr is suppressed. Without the raw fallback to the base .env
+  // the project's whole config was silently lost and the instance came up on scrape defaults alone.
   const orch = mkdtempSync(resolve(tmpdir(), "wt-render-nodotenvx-"));
   try {
     const project = "apartx-help";
@@ -362,11 +362,11 @@ test("renderEnvFile отдаёт ключи base .env, даже когда doten
 
     const out = await renderEnvFile(orch, project, "feat", "host.docker.internal");
     const content = await Bun.file(out).text();
-    // ключ, которого нет ни в .env.worktree, ни среди scrape-дефолтов
+    // a key that is neither in .env.worktree nor among the scrape defaults
     expect(content).toContain("PUBLIC_ROOT_CATEGORY_ID=abc123\n");
-    // имя базы из .env не теряется в пользу scrape-дефолта `mongodb://<host>:27017`
+    // the DB name from .env is not lost in favor of the scrape default `mongodb://<host>:27017`
     expect(content).toContain("MONGO_URL=mongodb://host.docker.internal:27017/apartx\n");
-    // worktree по-прежнему перекрывает базовый порт
+    // the worktree still overrides the base port
     expect(content).toContain("PORT=6153\n");
   } finally {
     rmSync(orch, { recursive: true, force: true });
@@ -396,27 +396,27 @@ test("renderEnvFile layers worktree-only keys over base .env", async () => {
   }
 });
 
-test("shInherit: ненулевой код → ошибка с командой и кодом", async () => {
+test("shInherit: non-zero code → error with the command and the code", async () => {
   const err = await shInherit(["sh", "-c", "exit 3"]).then(
     () => null,
     (e: Error) => e,
   );
-  expect(err!.message).toContain("кодом 3");
+  expect(err!.message).toContain("code 3");
   expect(err!.message).toContain("sh -c exit 3");
 });
 
-test("shInherit: подсказка по коду попадает в текст ошибки", async () => {
-  const err = await shInherit(["sh", "-c", "exit 125"], { 125: "имя занято — docker rm -f wtdev-x" }).then(
+test("shInherit: the hint for the exit code ends up in the error text", async () => {
+  const err = await shInherit(["sh", "-c", "exit 125"], { 125: "name taken — docker rm -f wtdev-x" }).then(
     () => null,
     (e: Error) => e,
   );
-  expect(err!.message).toContain("имя занято — docker rm -f wtdev-x");
+  expect(err!.message).toContain("name taken — docker rm -f wtdev-x");
 });
 
-test("shInherit: подсказка не для этого кода — не подмешивается", async () => {
-  const err = await shInherit(["sh", "-c", "exit 1"], { 125: "не должно появиться" }).then(
+test("shInherit: a hint for a different code is not mixed in", async () => {
+  const err = await shInherit(["sh", "-c", "exit 1"], { 125: "must not appear" }).then(
     () => null,
     (e: Error) => e,
   );
-  expect(err!.message).not.toContain("не должно появиться");
+  expect(err!.message).not.toContain("must not appear");
 });

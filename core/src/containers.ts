@@ -1,15 +1,15 @@
-/** Имя dev-контейнера. Префикс wtdev- не конфликтует с compose-именами apartx-*. */
+/** Dev container name. The wtdev- prefix does not clash with the apartx-* compose names. */
 export const containerName = (p: string, slug: string): string => `wtdev-${p}-${slug}`;
 
 export interface DockerResult {
   code: number;
-  /** Единственный источник причины отказа — гасить его нельзя. */
+  /** The only source of the failure reason — it must never be swallowed. */
   stderr: string;
-  /** Нужен только читающим командам (ps); rm его не смотрит. */
+  /** Only needed by read commands (ps); rm does not look at it. */
   stdout?: string;
 }
 
-/** Запуск `docker <argv…>`; инъектируется в тестах вместо реального демона. */
+/** Runs `docker <argv…>`; injected in tests in place of the real daemon. */
 export type DockerExec = (argv: string[]) => Promise<DockerResult>;
 
 export const dockerExec: DockerExec = async (argv) => {
@@ -22,11 +22,11 @@ export const dockerExec: DockerExec = async (argv) => {
 };
 
 const dockerFail = (argv: string[], r: DockerResult): Error =>
-  new Error(`docker ${argv.join(" ")} → код ${r.code}${r.stderr ? `: ${r.stderr}` : ""}`);
+  new Error(`docker ${argv.join(" ")} → exit code ${r.code}${r.stderr ? `: ${r.stderr}` : ""}`);
 
 /**
- * `docker ps <argv…>` построчно. Кидает при ненулевом коде: молчаливый пустой список
- * неотличим от «не смог спросить демона» и превращается в ложное «контейнеров нет».
+ * `docker ps <argv…>` line by line. Throws on a non-zero exit code: a silent empty list
+ * is indistinguishable from "could not ask the daemon" and turns into a false "no containers".
  */
 export async function dockerPs(argv: string[], exec: DockerExec = dockerExec): Promise<string[]> {
   const full = ["ps", ...argv];
@@ -37,10 +37,10 @@ export async function dockerPs(argv: string[], exec: DockerExec = dockerExec): P
 }
 
 /**
- * Удалось ли `docker rm`. Код 0 — да (современный docker так выходит и на «нет такого
- * контейнера», просто пишет об этом в stderr). Ненулевой код с «No such container» —
- * тоже успех (старый docker; цель достигнута — контейнера нет). Всё прочее —
- * настоящий отказ (демон недоступен, нет прав, контейнер не снимается).
+ * Whether `docker rm` succeeded. Exit code 0 — yes (modern docker exits this way even on "no such
+ * container", it just reports it on stderr). A non-zero code with "No such container" is
+ * also a success (older docker; the goal is reached — the container is gone). Anything else
+ * is a real failure (daemon unreachable, no permission, the container cannot be removed).
  */
 export function isDockerRemoveOk(r: DockerResult): boolean {
   if (r.code === 0) return true;
@@ -48,9 +48,9 @@ export function isDockerRemoveOk(r: DockerResult): boolean {
 }
 
 /**
- * `docker rm -f <ids…>`; кидает с текстом stderr от docker, если контейнер остался.
- * Молчаливое проглатывание кода возврата здесь однажды привело к тому, что `wt stop`
- * рапортовал успех на неудалённом контейнере, а следующий `wt start` падал с 125.
+ * `docker rm -f <ids…>`; throws with docker's stderr text if the container is still there.
+ * Silently swallowing the exit code here once made `wt stop` report success for a
+ * container that was never removed, and the next `wt start` then failed with 125.
  */
 export async function dockerRemove(ids: string[], exec: DockerExec = dockerExec): Promise<void> {
   if (!ids.length) return;

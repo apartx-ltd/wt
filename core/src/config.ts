@@ -2,75 +2,75 @@ import { resolve, basename } from "node:path";
 import { existsSync } from "node:fs";
 import { registerSelfResolver } from "./self-resolve";
 
-/** Docker-режим проекта: наличие image ⇒ проект запускается контейнером. */
+/** Docker mode of a project: an `image` present ⇒ the project runs as a container. */
 export interface DockerConfig {
   image: string;
 }
 
-/** Членство проекта в core-стеке (`wt up`/`wt down`): какой slug поднимать. */
+/** Membership of a project in the core stack (`wt up`/`wt down`): which slug to bring up. */
 export interface CoreSpec {
   slug: string;
 }
 
-/** Конфиг одного проекта (декларативные данные, без логики). */
+/** Config of a single project (declarative data, no logic). */
 export interface ProjectConfig {
-  /** имя плагин-пакета; если опущено — берётся defaults.plugin. */
+  /** plugin package name; when omitted, defaults.plugin is used. */
   plugin?: string;
-  /** присутствует ⇒ dockerized; image — единственный источник образа. */
+  /** present ⇒ dockerized; `image` is the single source of the image. */
   docker?: DockerConfig;
-  /** присутствует ⇒ входит в core-стек. */
+  /** present ⇒ part of the core stack. */
   core?: CoreSpec;
   /**
-   * опц. env worktree-инстанса: пишется в `.env.worktree` (wt-managed, регенерируется на start).
-   * Шаблоны: ${port}, ${offset}, ${branchSuffix} (ветка без `type/`, не-алфанум → `_`).
-   * Base-checkout не получает — у него нет `.env.worktree`.
+   * optional env of a worktree instance: written to `.env.worktree` (wt-managed, regenerated on start).
+   * Templates: ${port}, ${offset}, ${branchSuffix} (branch without `type/`, non-alphanumerics → `_`).
+   * The base checkout does not get it — it has no `.env.worktree`.
    */
   env?: Record<string, string>;
 }
 
-/** Конвенция веток workspace. */
+/** Branch convention of the workspace. */
 export interface BranchConfig {
-  /** ветка форка/интеграции (apartx: "develop"). */
+  /** fork/integration branch (apartx: "develop"). */
   base: string;
-  /** префикс worktree-веток и правило slug↔branch (apartx: "feature/"). */
+  /** prefix of worktree branches and the slug↔branch rule (apartx: "feature/"). */
   prefix: string;
 }
 
 export interface PortsConfig {
-  /** шаг смещения портов между worktree (дефолт 10). */
+  /** port offset step between worktrees (default 10). */
   step?: number;
 }
 
-/** Декларативный конфиг workspace (корень `wt.config.ts`). */
+/** Declarative workspace config (root `wt.config.ts`). */
 export interface WorkspaceConfig {
   title?: string;
-  /** имя проекта-апстрима для shorthand `--server` (apartx: "apartx-server"). */
+  /** name of the upstream project for the `--server` shorthand (apartx: "apartx-server"). */
   serverProject?: string;
-  /** multi-repo: подкаталог с репозиториями (дефолт "projects"). Взаимоисключающe с `project`. */
+  /** multi-repo: subdirectory holding the repositories (default "projects"). Mutually exclusive with `project`. */
   projectsDir?: string;
-  /** single-repo: ровно один проект, корень репо = проект. Взаимоисключающe с `projects`. */
+  /** single-repo: exactly one project, the repo root is the project. Mutually exclusive with `projects`. */
   project?: ProjectConfig;
-  /** multi-repo: карта проектов по имени каталога. */
+  /** multi-repo: map of projects keyed by directory name. */
   projects?: Record<string, ProjectConfig>;
   branches?: BranchConfig;
   ports?: PortsConfig;
-  /** дефолты, deep-merge'атся в каждый проект. */
+  /** defaults, deep-merged into every project. */
   defaults?: ProjectConfig;
-  /** межсервисный mesh: строки `consumer:target:mechanism:key`. */
+  /** inter-service mesh: `consumer:target:mechanism:key` strings. */
   links?: string[];
 }
 
-/** Identity-хелпер: только для типизации `wt.config.ts`. */
+/** Identity helper: only for typing `wt.config.ts`. */
 export function defineWorkspace(config: WorkspaceConfig): WorkspaceConfig {
   return config;
 }
 
-/** Полностью разрешённый конфиг проекта (после defaults-merge; plugin гарантирован при валидном конфиге). */
+/** Fully resolved project config (after the defaults merge; plugin is guaranteed for a valid config). */
 export interface ResolvedProjectConfig extends ProjectConfig {
   plugin: string;
 }
 
-/** Разрешённый workspace: нормализованная карта проектов + дефолты. */
+/** Resolved workspace: normalized project map + defaults. */
 export interface ResolvedConfig {
   title?: string;
   serverProject?: string;
@@ -81,7 +81,7 @@ export interface ResolvedConfig {
   links: string[];
 }
 
-/** Рекурсивный merge: вложенные plain-объекты сливаются, скаляры/массивы перекрываются `override`. */
+/** Recursive merge: nested plain objects are merged, scalars/arrays are replaced by `override`. */
 export function deepMerge<T>(base: T, override: Partial<T>): T {
   const out: any = Array.isArray(base) ? [...(base as any)] : { ...(base as any) };
   for (const [k, v] of Object.entries(override ?? {})) {
@@ -96,9 +96,9 @@ export function deepMerge<T>(base: T, override: Partial<T>): T {
 }
 
 /**
- * Разрешить декларативный конфиг: нормализовать single-repo (`project`) в карту из одного
- * элемента, deep-merge'нуть `defaults` в каждый проект, проставить дефолты branches/ports/dir.
- * `repoName` — имя single-repo проекта (basename корня репо); нужно только для single-repo формы.
+ * Resolve the declarative config: normalize single-repo (`project`) into a one-entry map,
+ * deep-merge `defaults` into every project, fill in defaults for branches/ports/dir.
+ * `repoName` — name of the single-repo project (basename of the repo root); only needed for the single-repo form.
  */
 export function resolveConfig(config: WorkspaceConfig, repoName = "app"): ResolvedConfig {
   const projectsDir = config.project ? "." : (config.projectsDir ?? "projects");
@@ -109,7 +109,7 @@ export function resolveConfig(config: WorkspaceConfig, repoName = "app"): Resolv
   const projects: Record<string, ResolvedProjectConfig> = {};
   for (const [name, pc] of Object.entries(raw)) {
     const merged = deepMerge<ProjectConfig>(defaults, pc);
-    projects[name] = merged as ResolvedProjectConfig; // plugin-наличие проверяет валидация (Task 3)
+    projects[name] = merged as ResolvedProjectConfig; // presence of plugin is checked by validation (Task 3)
   }
   return {
     title: config.title,
@@ -122,65 +122,65 @@ export function resolveConfig(config: WorkspaceConfig, repoName = "app"): Resolv
   };
 }
 
-/** Проверить конфиг; кидает Error с человекочитаемым текстом. Возвращает разрешённый конфиг. */
+/** Validate the config; throws an Error with a human-readable message. Returns the resolved config. */
 export function validateConfig(config: WorkspaceConfig, repoName = "app"): ResolvedConfig {
   const hasProject = config.project !== undefined;
   const hasProjects = config.projects !== undefined;
   if (hasProject === hasProjects) {
-    throw new Error("wt.config: задайте ровно один из `project` / `projects`");
+    throw new Error("wt.config: set exactly one of `project` / `projects`");
   }
   if (hasProject && config.projectsDir !== undefined) {
-    throw new Error("wt.config: `projectsDir` несовместим с single-repo `project`");
+    throw new Error("wt.config: `projectsDir` is incompatible with single-repo `project`");
   }
   const resolved = resolveConfig(config, repoName);
   for (const [name, pc] of Object.entries(resolved.projects)) {
-    if (!pc.plugin) throw new Error(`wt.config: проект ${name}: не задан plugin (ни в проекте, ни в defaults)`);
+    if (!pc.plugin) throw new Error(`wt.config: project ${name}: no plugin set (neither in the project nor in defaults)`);
   }
   return resolved;
 }
 
 /**
- * Загрузить и проверить `<orch>/wt.config.ts` (single-repo: корень репо). Кидает, если файла
- * нет или конфиг невалиден. `repoName` — basename корня (для single-repo формы).
+ * Load and validate `<orch>/wt.config.ts` (single-repo: the repo root). Throws if the file
+ * is missing or the config is invalid. `repoName` — basename of the root (for the single-repo form).
  */
 export async function loadConfig(orch: string, repoName = "app"): Promise<ResolvedConfig> {
   const path = resolve(orch, "wt.config.ts");
   registerSelfResolver(); // lets the config `import … from "@apartx/wt"` without the consumer having node_modules
   const mod = await import(path).catch((e) => {
-    throw new Error(`wt.config: не удалось загрузить ${path}: ${(e as Error).message}`);
+    throw new Error(`wt.config: failed to load ${path}: ${(e as Error).message}`);
   });
   const config = (mod.default ?? mod) as WorkspaceConfig;
   return validateConfig(config, repoName);
 }
 
 /**
- * Конфиг ОДНОГО проекта для (project) в оркестраторе `orch`. Если у корня есть
- * `wt.config.ts` — берём оттуда (config-driven, M1+). Иначе синтезируем паритетный
- * host-only конфиг (`@apartx/wt/plugin-meteor`, без docker), чтобы start/new работали в
- * тестах с временными orch-каталогами и в single-repo без файла.
+ * Config of ONE project (project) in orchestrator `orch`. If the root has a
+ * `wt.config.ts`, take it from there (config-driven, M1+). Otherwise synthesize a parity
+ * host-only config (`@apartx/wt/plugin-meteor`, no docker) so that start/new work in
+ * tests with temporary orch directories and in single-repo without the file.
  */
 export async function resolveProjectConfig(orch: string, project: string): Promise<ResolvedProjectConfig> {
   if (existsSync(resolve(orch, "wt.config.ts"))) {
     const cfg = await loadConfig(orch, basename(orch));
     const pc = cfg.projects[project];
     if (pc) return pc;
-    // M1: конфиг аддитивен — он объявляет/переопределяет перечисленные (dockerized core)
-    // проекты, а все прочие (apartx-whatsapp/-spaces-host/…) сохраняют поведение из
-    // констант через тот же фоллбэк, что и при отсутствии конфига. M2 переедет все
-    // проекты в конфиг и сможет ужесточить это до throw-on-undeclared.
+    // M1: the config is additive — it declares/overrides the listed (dockerized core)
+    // projects, while all others (apartx-whatsapp/-spaces-host/…) keep the behavior from
+    // the constants through the same fallback as when there is no config. M2 will move all
+    // projects into the config and can tighten this to throw-on-undeclared.
   }
-  // Фоллбэк-паритет: host-only meteor для неперечисленных/без-конфига проектов.
+  // Parity fallback: host-only meteor for unlisted projects / projects without a config.
   return fallbackProjectConfig(project);
 }
 
-/** projectsDir разрешённого workspace ("." для single-repo, иначе "projects"); "projects" если конфига нет. */
+/** projectsDir of the resolved workspace ("." for single-repo, otherwise "projects"); "projects" when there is no config. */
 export async function resolveProjectsDir(orch: string): Promise<string> {
   if (!existsSync(resolve(orch, "wt.config.ts"))) return "projects";
   const cfg = await loadConfig(orch, basename(orch));
   return cfg.projectsDir;
 }
 
-/** Имя проекта-апстрима для `--server` из `<orch>/wt.config.ts`; null если конфига/поля нет. */
+/** Name of the upstream project for `--server` from `<orch>/wt.config.ts`; null if there is no config/field. */
 export async function resolveServerProject(orch: string): Promise<string | null> {
   if (!existsSync(resolve(orch, "wt.config.ts"))) return null;
   const cfg = await loadConfig(orch, basename(orch));
@@ -188,9 +188,9 @@ export async function resolveServerProject(orch: string): Promise<string | null>
 }
 
 /**
- * Имена всех dockerized-проектов (с `docker.image`) из `<orch>/wt.config.ts` —
- * стабильный источник индекса для базовых доп-портов (deterministicAuxBasePort).
- * Конфига нет (тесты/single-repo без файла) ⇒ []. Apartx-специфики в движке нет.
+ * Names of all dockerized projects (with `docker.image`) from `<orch>/wt.config.ts` —
+ * a stable index source for the base aux ports (deterministicAuxBasePort).
+ * No config (tests / single-repo without the file) ⇒ []. No apartx specifics in the engine.
  */
 export async function resolveDockerizedProjects(orch: string): Promise<string[]> {
   if (!existsSync(resolve(orch, "wt.config.ts"))) return [];
@@ -201,8 +201,8 @@ export async function resolveDockerizedProjects(orch: string): Promise<string[]>
 }
 
 /**
- * Core-стек (`wt up`/`wt down`): пары `[project, slug]` для проектов с `core` в
- * `<orch>/wt.config.ts`, отсортированы по имени проекта (детерминизм). Конфига нет ⇒ [].
+ * Core stack (`wt up`/`wt down`): `[project, slug]` pairs for projects with `core` in
+ * `<orch>/wt.config.ts`, sorted by project name (determinism). No config ⇒ [].
  */
 export async function resolveCoreStack(orch: string): Promise<Array<[string, string]>> {
   if (!existsSync(resolve(orch, "wt.config.ts"))) return [];
@@ -214,15 +214,15 @@ export async function resolveCoreStack(orch: string): Promise<Array<[string, str
 }
 
 /**
- * Спеки межсервисных линков (`consumer:target:mechanism:key`) из `<orch>/wt.config.ts`.
- * Конфига нет (тесты/single-repo без файла) ⇒ []. Apartx-специфики в движке нет.
+ * Inter-service link specs (`consumer:target:mechanism:key`) from `<orch>/wt.config.ts`.
+ * No config (tests / single-repo without the file) ⇒ []. No apartx specifics in the engine.
  */
 export async function resolveLinkSpecs(orch: string): Promise<string[]> {
   if (!existsSync(resolve(orch, "wt.config.ts"))) return [];
   return (await loadConfig(orch, basename(orch))).links;
 }
 
-/** Паритетный конфиг при отсутствии записи в `wt.config.ts`: host-meteor, без docker. */
+/** Parity config when `wt.config.ts` has no entry: host meteor, no docker. */
 function fallbackProjectConfig(_project: string): ResolvedProjectConfig {
   return { plugin: "@apartx/wt/plugin-meteor" };
 }

@@ -39,10 +39,10 @@ test("resolveOrch prefers WT_ORCH over the upward search", () => {
   expect(resolveOrch({ WT_ORCH: "/tmp/x" }, bare)).toBe("/tmp/x");
 });
 
-test("resolveOrch канонизирует регистр пути (cd ~/projects/apartx на регистронезависимой ФС)", () => {
+test("resolveOrch canonicalizes path case (cd ~/projects/apartx on a case-insensitive filesystem)", () => {
   const found = resolveOrch({}, resolve(root, "a"));
   const swapped = found.replace(/[A-Za-z](?=[^/]*$)/, (c) => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()));
-  if (!existsSync(swapped)) return; // регистрозависимая ФС — кейса нет
+  if (!existsSync(swapped)) return; // case-sensitive filesystem — the case does not arise
   expect(resolveOrch({ WT_ORCH: swapped }, bare)).toBe(found);
   expect(resolveOrch({}, resolve(swapped, "a", "b"))).toBe(found);
 });

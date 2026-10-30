@@ -81,16 +81,16 @@ test("resolveConfig defaults branches/ports/projectsDir when omitted", () => {
 
 test("validateConfig rejects both project and projects set", () => {
   expect(() => validateConfig({ project: { plugin: "p" }, projects: { a: { plugin: "p" } } }))
-    .toThrow(/ровно один из `project` \/ `projects`/);
+    .toThrow(/exactly one of `project` \/ `projects`/);
 });
 
 test("validateConfig rejects neither project nor projects", () => {
-  expect(() => validateConfig({})).toThrow(/ровно один из `project` \/ `projects`/);
+  expect(() => validateConfig({})).toThrow(/exactly one of `project` \/ `projects`/);
 });
 
 test("validateConfig rejects a project with no plugin after defaults", () => {
   expect(() => validateConfig({ projects: { a: { core: { slug: "base" } } } }))
-    .toThrow(/проект a: не задан plugin/);
+    .toThrow(/project a: no plugin set/);
 });
 
 test("validateConfig passes a project that inherits plugin from defaults", () => {

@@ -1,8 +1,8 @@
-// wt slim — снос восстанавливаемых артефактов (зависимости, кэш сборки) во всех остановленных
-// worktree, когда кончилось место. Код, git, env и порт не трогаются: docker-тома заново
-// наполняет `wt start` (ensureDeps), host-каталоги — тот же `wt start` (ensureHostDeps).
-// Заодно сносит тома-сироты: wtdev-тома без worktree и base (worktree удалён мимо `wt rm`).
-// classifySlim — чистая функция над собранными фактами; fs/docker только в сборщике.
+// wt slim — removes restorable artifacts (dependencies, build cache) in all stopped
+// worktrees when disk space runs out. Code, git, env and port are left alone: docker volumes are
+// refilled by `wt start` (ensureDeps), host directories by the same `wt start` (ensureHostDeps).
+// It also removes orphan volumes: wtdev volumes with neither a worktree nor a base (the worktree was deleted bypassing `wt rm`).
+// classifySlim is a pure function over the collected facts; fs/docker only in the collector.
 
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
@@ -18,9 +18,9 @@ import { projectDir } from "./paths";
 
 export interface SlimFacts {
   running: boolean;
-  /** существующие host-каталоги из plugin.artifactDirs с размером. */
+  /** existing host directories from plugin.artifactDirs, with their size. */
   dirs: { path: string; bytes: number }[];
-  /** существующие docker-тома из plugin.docker().ownedVolumes. */
+  /** existing docker volumes from plugin.docker().ownedVolumes. */
   volumes: string[];
 }
 
@@ -37,7 +37,7 @@ export function classifySlim(f: SlimFacts): SlimDecision {
   return { action: "slim", reason: "slim" };
 }
 
-/** wtdev-тома, не принадлежащие ни одному существующему worktree и ни одному base (его снесли мимо `wt rm`). */
+/** wtdev volumes that belong to no existing worktree and no base (it was deleted bypassing `wt rm`). */
 export function findOrphanVolumes(all: string[], owned: Set<string>): string[] {
   return all.filter((v) => v.startsWith("wtdev-") && !owned.has(v));
 }
@@ -45,7 +45,7 @@ export function findOrphanVolumes(all: string[], owned: Set<string>): string[] {
 export interface SlimItem extends SlimDecision, SlimFacts {
   project: string;
   slug: string;
-  /** сумма host-каталогов; тома не меряются — `du` по сотням томов идёт десятки минут. */
+  /** sum over the host directories; volumes are not measured — `du` over hundreds of volumes takes tens of minutes. */
   hostBytes: number;
 }
 
@@ -60,12 +60,12 @@ async function duBytes(path: string): Promise<number> {
   return r.ok ? (parseInt(r.stdout.split("\t")[0]!, 10) || 0) * 1024 : 0;
 }
 
-/** Тома, которые plugin.docker() объявляет своими для (project, slug); не dockerized → []. */
+/** Volumes that plugin.docker() declares as its own for (project, slug); not dockerized → []. */
 async function ownedVolumes(orch: string, project: string, slug: string, dir: string, branch: string): Promise<string[]> {
   const config = await resolveProjectConfig(orch, project);
   const plugin = await loadPlugin(config.plugin);
   if (!config.docker?.image || !plugin.docker) return [];
-  // docker() читает только worktreeDir/container — остальной ctx для типа.
+  // docker() only reads worktreeDir/container — the rest of ctx is there for the type.
   const ctx: InstanceCtx = {
     orch, project, slug, branch,
     projectDir: projectDir(orch, project, await resolveProjectsDir(orch)), worktreeDir: dir, config,
@@ -77,7 +77,7 @@ async function ownedVolumes(orch: string, project: string, slug: string, dir: st
 
 export interface SlimPlan {
   items: SlimItem[];
-  /** тома удалённых мимо `wt rm` worktree — сносятся целиком, восстанавливать нечего. */
+  /** volumes of worktrees deleted bypassing `wt rm` — removed entirely, nothing to restore. */
   orphanVolumes: string[];
 }
 
@@ -89,9 +89,9 @@ export async function collectSlimFacts(orch: string): Promise<SlimPlan> {
   const allVolumes = vl.ok ? vl.stdout.split("\n").filter(Boolean) : [];
   const existingVolumes = new Set(allVolumes);
 
-  // Хозяева томов — base и каждый каталог worktrees/<p>/* на диске, а не только то, что
-  // перечислил git: разовый сбой `git worktree list` (пустой вывод) иначе объявил бы
-  // сиротами тома всех worktree (так и случилось 2026-10-20).
+  // Volume owners are base and every worktrees/<p>/* directory on disk, not just what
+  // git listed: a one-off `git worktree list` failure (empty output) would otherwise declare
+  // the volumes of all worktrees orphans (which is exactly what happened on 2026-10-20).
   const owned = new Set<string>();
   for (const p of await listProjects(orch)) {
     for (const v of await ownedVolumes(orch, p, BASE_SLUG, projectDir(orch, p, projectsDir), "")) owned.add(v);
@@ -124,7 +124,7 @@ export async function collectSlimFacts(orch: string): Promise<SlimPlan> {
   return { items, orphanVolumes: findOrphanVolumes(allVolumes, owned) };
 }
 
-/** `docker volume rm` по одному; возвращает те, что docker не отдал (держит контейнер). */
+/** `docker volume rm` one by one; returns the ones docker refused to remove (held by a container). */
 export async function removeVolumes(volumes: string[]): Promise<string[]> {
   const kept: string[] = [];
   for (const v of volumes) {
@@ -134,9 +134,9 @@ export async function removeVolumes(volumes: string[]): Promise<string[]> {
 }
 
 export interface SlimOutcome {
-  /** инстанс подняли между планом и apply — ничего не тронуто. */
+  /** the instance was started between plan and apply — nothing was touched. */
   started: boolean;
-  /** тома, которые docker не отдал (держит контейнер) — остались. */
+  /** volumes docker refused to remove (held by a container) — they remain. */
   keptVolumes: string[];
 }
 

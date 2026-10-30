@@ -9,12 +9,12 @@ import { resolve, basename } from "node:path";
 beforeAll(() => registerBundledPlugins());
 
 /**
- * Собрать одноразовый single-repo: git-репо с `wt.config.ts` (`project: { plugin:
- * "@apartx/wt/plugin-node" }`) + минимальное node-приложение. Ни одного apartx-знания —
- * чистый node-проект, по которому wt должен ездить как по любому bare-репо.
+ * Build a throwaway single-repo: a git repo with `wt.config.ts` (`project: { plugin:
+ * "@apartx/wt/plugin-node" }`) + a minimal node app. No apartx knowledge at all —
+ * a plain node project that wt has to drive like any bare repo.
  *
- * Дефолтную ветку явно ренеймим в `main` (init.defaultBranch у хоста может быть
- * `master`), чтобы `branches.base: "main"` всегда существовал как ref для форка.
+ * The default branch is explicitly renamed to `main` (the host's init.defaultBranch may be
+ * `master`), so that `branches.base: "main"` always exists as a ref to fork from.
  */
 async function makeSingleRepo(): Promise<string> {
   const orch = await mkdtemp(resolve(tmpdir(), "wt-singleproof-"));
@@ -37,7 +37,7 @@ async function makeSingleRepo(): Promise<string> {
   );
   await Bun.spawn(["git", "-C", orch, "add", "-A"]).exited;
   await Bun.spawn(["git", "-C", orch, "commit", "-q", "-m", "init"]).exited;
-  // детерминизм: гарантируем ветку `main` независимо от init.defaultBranch хоста.
+  // determinism: guarantee a `main` branch regardless of the host's init.defaultBranch.
   await Bun.spawn(["git", "-C", orch, "branch", "-M", "main"]).exited;
   return orch;
 }

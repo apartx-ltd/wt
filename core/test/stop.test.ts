@@ -78,7 +78,7 @@ test("stopInstance: missing runfile → null", async () => {
   }
 });
 
-test("stopInstance: dockerRm упал → error в исходе, runfile СОХРАНЁН", async () => {
+test("stopInstance: dockerRm failed → error in the outcome, runfile KEPT", async () => {
   const orch = orchWith({
     "apartx-cabinet-gateway-qr.run":
       "container=wtdev-apartx-cabinet-gateway-qr\nport=3520\nbranch=b\nstarted=1\nproject=apartx-cabinet\nslug=gateway-qr\n",
@@ -86,21 +86,21 @@ test("stopInstance: dockerRm упал → error в исходе, runfile СОХ�
   try {
     const actions: StopActions = {
       dockerRm: async () => {
-        throw new Error("docker rm -f wtdev-apartx-cabinet-gateway-qr → код 1: Cannot connect to the Docker daemon");
+        throw new Error("docker rm -f wtdev-apartx-cabinet-gateway-qr → exit code 1: Cannot connect to the Docker daemon");
       },
       killTree: async () => {},
     };
     const r = await stopInstance(orch, "apartx-cabinet", "gateway-qr", deadProbes, actions);
     expect(r?.action).toBe("container");
     expect(r?.error).toContain("Cannot connect to the Docker daemon");
-    // инстанс не снят — runfile должен пережить неудачу, иначе он пропадёт из ps/reap
+    // the instance is not down — the runfile must survive the failure, otherwise it vanishes from ps/reap
     expect(existsSync(resolve(orch, "var", "run", "apartx-cabinet-gateway-qr.run"))).toBe(true);
   } finally {
     rmSync(orch, { recursive: true, force: true });
   }
 });
 
-test("stopInstance: killTree упал → error в исходе, runfile СОХРАНЁН", async () => {
+test("stopInstance: killTree failed → error in the outcome, runfile KEPT", async () => {
   const orch = orchWith({
     "apartx-help-x.run": "pid=4242\nport=3701\nbranch=b\nstarted=1\nproject=apartx-help\nslug=x\npgroup=1\n",
   });
@@ -119,7 +119,7 @@ test("stopInstance: killTree упал → error в исходе, runfile СОХ�
   }
 });
 
-test("stopInstance: успех → error=null", async () => {
+test("stopInstance: success → error=null", async () => {
   const orch = orchWith({
     "apartx-server-feat.run": "container=wtdev-apartx-server-feat\nport=4010\nbranch=b\nstarted=1\nproject=apartx-server\nslug=feat\n",
   });
@@ -131,7 +131,7 @@ test("stopInstance: успех → error=null", async () => {
   }
 });
 
-test("stopAll: падение одного инстанса не мешает остальным", async () => {
+test("stopAll: a failure of one instance does not block the others", async () => {
   const orch = orchWith({
     "apartx-server-a.run": "container=wtdev-apartx-server-a\nport=4010\nbranch=b\nstarted=1\nproject=apartx-server\nslug=a\n",
     "apartx-help-b.run": "pid=999\nport=3701\nbranch=b\nstarted=1\nproject=apartx-help\nslug=b\npgroup=1\n",

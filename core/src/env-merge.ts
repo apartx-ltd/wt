@@ -1,5 +1,5 @@
-/** Распарсить текст .env: `KEY=VALUE` построчно, снять обрамляющие кавычки, игнор `#`/пустых.
- *  Поддерживает shell-стиль `export KEY=VALUE` (ведущий `export ` снимается). */
+/** Parse .env text: `KEY=VALUE` per line, strip surrounding quotes, ignore `#`/empty lines.
+ *  Supports shell-style `export KEY=VALUE` (the leading `export ` is stripped). */
 export function parseEnvFile(text: string): Map<string, string> {
   const out = new Map<string, string>();
   for (const raw of text.split("\n")) {
@@ -15,7 +15,7 @@ export function parseEnvFile(text: string): Map<string, string> {
   return out;
 }
 
-/** Слить env-файлы в словарь: каждый следующий перекрывает предыдущие; отсутствующие пропускаются. */
+/** Merge env files into a map: each next file overrides the previous ones; missing files are skipped. */
 export async function mergeEnvFiles(files: string[]): Promise<Record<string, string>> {
   const acc = new Map<string, string>();
   for (const file of files) {

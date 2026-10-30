@@ -7,10 +7,10 @@ import { resolveProjectsDir } from "./config";
 
 export interface PorcelainEntry {
   path: string;
-  branch: string; // без refs/heads/, "" для detached
+  branch: string; // without refs/heads/, "" for detached
 }
 
-/** Разбор `git worktree list --porcelain` (паритет с awk в cmd_list). */
+/** Parse `git worktree list --porcelain` (parity with the awk in cmd_list). */
 export function parseWorktreePorcelain(text: string): PorcelainEntry[] {
   const out: PorcelainEntry[] = [];
   let path: string | null = null;
@@ -38,14 +38,14 @@ async function gitWorktrees(projectDir: string): Promise<PorcelainEntry[]> {
     stderr: "pipe",
   });
   const [text, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
-  // Сбой git не должен выглядеть как «worktree нет»: на пустом списке `wt slim` счёл бы сиротами все тома.
+  // A git failure must not look like "no worktrees": on an empty list `wt slim` would treat every volume as an orphan.
   if ((await proc.exited) !== 0) throw new Error(`git worktree list (${projectDir}): ${err.trim() || "failed"}`);
   return parseWorktreePorcelain(text);
 }
 
 /**
- * Worktree’ы под `<orch>/worktrees/` по всем (или одному) проектам, с PORT из
- * `.env.worktree`. Паритет с `wt list --json`.
+ * Worktrees under `<orch>/worktrees/` across all (or one) projects, with PORT from
+ * `.env.worktree`. Parity with `wt list --json`.
  */
 export async function listWorktrees(orch: string, project?: string): Promise<Worktree[]> {
   const projects = project ? [project] : await listProjects(orch);

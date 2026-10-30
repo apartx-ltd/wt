@@ -2,20 +2,20 @@ import { resolve } from "node:path";
 import { mkdir, appendFile, writeFile } from "node:fs/promises";
 import type { ExtraPortSpec } from "./plugin";
 
-/** Шаг смещения портов между worktree (worktree-env.sh STEP=10). */
+/** Port offset step between worktrees (worktree-env.sh STEP=10). */
 export const STEP = 10;
 
 /**
- * Порты, которые worktree выдавать нельзя. На macOS 5000 и 7000 слушает системный
- * ControlCenter (приёмник AirPlay) — на IPv4 и IPv6 сразу. `docker run -p` при этом
- * не падает и `docker port` рапортует публикацию, но соединения до контейнера не
- * доходят: на запрос отвечает `Server: AirTunes/…` с 403. Инстанс молча недоступен ни
- * с хоста, ни из соседнего контейнера через host.docker.internal, а `wt start --link`
- * успевает прописать потребителю этот адрес.
+ * Ports that must never be handed to a worktree. On macOS, 5000 and 7000 are taken by the system
+ * ControlCenter (the AirPlay receiver) — on IPv4 and IPv6 alike. `docker run -p` does not
+ * fail and `docker port` reports the port as published, but connections never reach the
+ * container: the request is answered by `Server: AirTunes/…` with a 403. The instance is silently
+ * unreachable both from the host and from a neighboring container via host.docker.internal, while
+ * `wt start --link` has already written that address into the consumer.
  *
- * Список статический, а не «проверить, слушает ли кто-то порт»: аллокация обязана быть
- * детерминированной и повторяемой для ветки, иначе offset поедет от случайного состояния
- * машины в момент вызова.
+ * The list is static rather than "check whether something listens on the port": allocation has to be
+ * deterministic and repeatable for a branch, otherwise the offset would drift with the random state
+ * of the machine at the moment of the call.
  */
 export const BLOCKED_PORTS = [5000, 7000];
 
@@ -27,7 +27,7 @@ export interface LedgerRow {
   offset: number;
 }
 
-/** Первое `^<key>=` значение из env-файла, со снятыми кавычками/пробелами; null если нет. */
+/** The first `^<key>=` value from an env file, with quotes/whitespace stripped; null if absent. */
 export async function readEnvValue(file: string, key: string): Promise<string | null> {
   const f = Bun.file(file);
   if (!(await f.exists())) return null;
@@ -39,7 +39,7 @@ export async function readEnvValue(file: string, key: string): Promise<string | 
   return null;
 }
 
-/** Первое `^PORT=` значение из файла, со снятыми кавычками/пробелами; null если нет. */
+/** The first `^PORT=` value from a file, with quotes/whitespace stripped; null if absent. */
 async function grepPort(file: string): Promise<number | null> {
   const f = Bun.file(file);
   if (!(await f.exists())) return null;
@@ -55,8 +55,8 @@ async function grepPort(file: string): Promise<number | null> {
 }
 
 /**
- * Базовый PORT проекта: из `<projectDir>/.env` `PORT=`, иначе из package.json
- * (`PORT=NN` | `--port NN` | `--port=NN` | `-p NN`, первое число). Паритет с
+ * The project's base PORT: from `PORT=` in `<projectDir>/.env`, otherwise from package.json
+ * (`PORT=NN` | `--port NN` | `--port=NN` | `-p NN`, first number). Parity with
  * proj_base_port()/worktree-env.sh.
  */
 export async function resolveBasePort(projectDir: string): Promise<number | null> {
@@ -74,30 +74,30 @@ export async function resolveBasePort(projectDir: string): Promise<number | null
 }
 
 /**
- * Детерминированный базовый доп-порт проекта: `spec.basePort` + стабильный индекс проекта
- * среди dockerized-набора. Уникален в пределах набора; лимит 10 корзин (offset'ы worktree
- * кратны STEP=10 → разница <10 исключает коллизии base↔worktree). Имя/число стека (hmr/8085)
- * приходит в `spec` от плагина, не зашито здесь.
+ * Deterministic base aux port of a project: `spec.basePort` + the project's stable index
+ * within the dockerized set. Unique within the set; limited to 10 buckets (worktree offsets
+ * are multiples of STEP=10 → a difference <10 rules out base↔worktree collisions). The stack's name/number (hmr/8085)
+ * comes in `spec` from the plugin and is not hardcoded here.
  */
 export function deterministicAuxBasePort(project: string, basePort: number, dockerized: string[]): number {
   const sorted = [...dockerized].sort();
   const idx = sorted.indexOf(project);
   if (idx === -1) {
     throw new Error(
-      `deterministicAuxBasePort: ${project} не входит в dockerized-проекты конфига; ` +
-        `задайте env-override доп-порта в .env проекта`,
+      `deterministicAuxBasePort: ${project} is not among the config's dockerized projects; ` +
+        `set the aux port's env override in the project's .env`,
     );
   }
   if (idx >= 10) {
     throw new Error(
-      `deterministicAuxBasePort: ${project} получил индекс ${idx} >= 10; ` +
-        `задайте env-override доп-порта в .env проекта`,
+      `deterministicAuxBasePort: ${project} got index ${idx} >= 10; ` +
+        `set the aux port's env override in the project's .env`,
     );
   }
   return basePort + idx;
 }
 
-/** База доп-порта: env-override из `<projectDir>/.env` (spec.envKey), иначе детерминированно. */
+/** Aux port base: the env override from `<projectDir>/.env` (spec.envKey), otherwise deterministic. */
 export async function resolveAuxBasePort(
   projectDir: string,
   project: string,
@@ -114,7 +114,7 @@ export async function resolveAuxBasePort(
   return deterministicAuxBasePort(project, spec.basePort, dockerized);
 }
 
-/** Разбор ledger-текста (`project\tbranch\toffset`). Пустые/короткие строки игнор. */
+/** Parse ledger text (`project\tbranch\toffset`). Empty/short lines are ignored. */
 export function parseLedger(text: string): LedgerRow[] {
   const rows: LedgerRow[] = [];
   for (const line of text.split("\n")) {
@@ -129,13 +129,13 @@ export function parseLedger(text: string): LedgerRow[] {
 }
 
 /**
- * Offset для (project, branch): существующий если есть; иначе наименьший `n*STEP`
- * (n≥1), которого нет среди ВСЕХ offset’ов ledger. Паритет с worktree-env.sh.
+ * Offset for (project, branch): the existing one if any; otherwise the smallest `n*STEP`
+ * (n≥1) not present among ALL offsets in the ledger. Parity with worktree-env.sh.
  *
- * `basePort` включает проверку на BLOCKED_PORTS: занятый системой порт не выдаётся ни
- * новой ветке, ни известной — ветка со «слепым» портом переезжает на следующий свободный
- * (её строку в ledger надо переписать, см. upsertLedger). Без `basePort` поведение
- * прежнее.
+ * `basePort` enables the BLOCKED_PORTS check: a port taken by the system is handed neither to
+ * a new branch nor to a known one — a branch with a "blind" port moves to the next free one
+ * (its ledger row has to be rewritten, see upsertLedger). Without `basePort` the behavior
+ * is unchanged.
  */
 export function allocateOffset(
   ledger: LedgerRow[],
@@ -152,21 +152,21 @@ export function allocateOffset(
   return n * STEP;
 }
 
-/** PORT из `.env.worktree` worktree-каталога; null если файла/ключа нет. */
+/** PORT from the worktree directory's `.env.worktree`; null if the file/key is missing. */
 export async function readWorktreePort(worktreeDir: string): Promise<number | null> {
   return grepPort(resolve(worktreeDir, ".env.worktree"));
 }
 
 const ledgerPath = (orch: string) => resolve(orch, "var", "worktree-ports.tsv");
 
-/** Прочитать ledger из `<orch>/var/worktree-ports.tsv`; [] если файла нет. */
+/** Read the ledger from `<orch>/var/worktree-ports.tsv`; [] if the file is missing. */
 export async function readLedger(orch: string): Promise<LedgerRow[]> {
   const f = Bun.file(ledgerPath(orch));
   if (!(await f.exists())) return [];
   return parseLedger(await f.text());
 }
 
-/** Дописать строку offset в ledger (создав var/ при отсутствии). Без лока — паритет worktree-env.sh. */
+/** Append an offset row to the ledger (creating var/ if missing). No lock — parity with worktree-env.sh. */
 export async function appendLedger(
   orch: string,
   project: string,
@@ -178,10 +178,10 @@ export async function appendLedger(
 }
 
 /**
- * Записать offset для (project, branch), заменив существующую строку. В отличие от
- * appendLedger переписывает файл целиком, поэтому зовётся ТОЛЬКО когда ветка реально
- * переезжает (порт попал в BLOCKED_PORTS): дубль строки не годится — allocateOffset
- * берёт первое совпадение и вернул бы прежний, недоступный порт.
+ * Write the offset for (project, branch), replacing the existing row. Unlike
+ * appendLedger it rewrites the whole file, so it is called ONLY when the branch actually
+ * moves (its port hit BLOCKED_PORTS): a duplicate row would not do — allocateOffset
+ * takes the first match and would return the old, unreachable port.
  */
 export async function upsertLedger(
   orch: string,

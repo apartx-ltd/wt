@@ -6,7 +6,7 @@ import { BASE_SLUG, computeWorktreeEnv, commitWorktreeEnv, regenerateWorktreeEnv
 import { readLedger } from "../src/ports";
 import { registerBundledPlugins } from "#plugins";
 
-// computeWorktreeEnv резолвит плагин проекта (envLines) → реестр должен быть заполнен.
+// computeWorktreeEnv resolves the project's plugin (envLines) → the registry has to be populated.
 beforeAll(() => registerBundledPlugins());
 
 // wt.config.ts declaring the dockerized core projects — source of both the docker-gate
@@ -47,7 +47,7 @@ test("BASE_SLUG is the reserved base-checkout sentinel 'base'", () => {
 test("createWorktree rejects reserved base slug", async () => {
   const orch = makeOrch();
   try {
-    await expect(createWorktree(orch, "apartx-server", BASE_SLUG)).rejects.toThrow(/зарезервирован/);
+    await expect(createWorktree(orch, "apartx-server", BASE_SLUG)).rejects.toThrow(/reserved/);
   } finally {
     rmSync(orch, { recursive: true, force: true });
   }
@@ -56,7 +56,7 @@ test("createWorktree rejects reserved base slug", async () => {
 test("removeWorktree rejects reserved base slug", async () => {
   const orch = makeOrch();
   try {
-    await expect(removeWorktree(orch, "apartx-server", BASE_SLUG)).rejects.toThrow(/базовый checkout/);
+    await expect(removeWorktree(orch, "apartx-server", BASE_SLUG)).rejects.toThrow(/base checkout/);
   } finally {
     rmSync(orch, { recursive: true, force: true });
   }
@@ -88,9 +88,9 @@ test("computeWorktreeEnv allocates next free offset for new branch (isNew=true, 
 });
 
 test("computeWorktreeEnv on non-dockerized project does not throw and omits HMR lines", async () => {
-  // Регрессия: deterministicBaseHmrPort кидает вне DOCKERIZED, а computeWorktreeEnv
-  // зовётся для любого проекта при `wt new`. Host-mode проект без RSPACK_DEVSERVER_PORT
-  // в .env должен спокойно создавать worktree (без HMR-строк).
+  // Regression: deterministicBaseHmrPort throws outside DOCKERIZED, while computeWorktreeEnv
+  // is called for every project on `wt new`. A host-mode project without RSPACK_DEVSERVER_PORT
+  // in .env must create a worktree without trouble (no HMR lines).
   const orch = mkdtempSync(resolve(tmpdir(), "wt-new-host-"));
   try {
     mkdirSync(resolve(orch, "projects", "apartx-spaces"), { recursive: true });
@@ -144,7 +144,7 @@ test("commitWorktreeEnv does not duplicate ledger row for known branch", async (
 
 // --- regenerateWorktreeEnvPreserving: self-heal stale/legacy .env.worktree ---
 
-// Каталог worktree для известной ветки feature/known (offset 10 в ledger фикстуры).
+// Worktree directory for the known branch feature/known (offset 10 in the fixture's ledger).
 function knownWtDir(orch: string): string {
   const d = resolve(orch, "worktrees", "apartx-server", "known");
   mkdirSync(d, { recursive: true });
@@ -155,13 +155,13 @@ test("regenerate heals legacy .env.worktree missing HMR keys (keeps PORT, adds R
   const orch = makeOrch();
   const wtDir = knownWtDir(orch);
   try {
-    // legacy: PORT/ROOT_URL + tail, БЕЗ RSPACK_DEVSERVER_PORT/HMR_PUBLIC_PORT
+    // legacy: PORT/ROOT_URL + tail, WITHOUT RSPACK_DEVSERVER_PORT/HMR_PUBLIC_PORT
     writeFileSync(
       resolve(wtDir, ".env.worktree"),
       "PORT=4010\nROOT_URL=http://localhost:4010\nMONGO_OPLOG_URL=\nMONTI_APP_ID=\nMONTI_APP_SECRET=\n",
     );
-    // HMR-порт = тот же детерминированный, что эмитит computeWorktreeEnv для этой ветки
-    // (dockerized-индекс apartx-server + offset 10). Сверяем против канона, не магической константы.
+    // HMR port = the same deterministic one computeWorktreeEnv emits for this branch
+    // (apartx-server's dockerized index + offset 10). Compare against the canonical output, not a magic constant.
     const canonical = (await computeWorktreeEnv(orch, "apartx-server", "feature/known")).content;
     const hmr = /RSPACK_DEVSERVER_PORT=(\d+)/.exec(canonical)![1]!;
     await regenerateWorktreeEnvPreserving(orch, "apartx-server", "feature/known", wtDir);
@@ -206,8 +206,8 @@ test("regenerate does NOT promote a shared worktree to isolated (no MONGO_URL ga
   }
 });
 
-// Проектный `env` из wt.config.ts: шаблоны раскрываются в .env.worktree. Мотив — CHATS_QUEUE_NS:
-// без своего неймспейса джобы общей Redis-очереди забирает любой дев-сервер (base, чужие ветки).
+// Project `env` from wt.config.ts: templates are expanded into .env.worktree. Motivation — CHATS_QUEUE_NS:
+// without its own namespace, jobs from the shared Redis queue are picked up by any dev server (base, other branches).
 function makeEnvOrch(): string {
   const orch = makeOrch();
   writeFileSync(
@@ -308,8 +308,8 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
   return out;
 }
 
-// wt.config.ts с тестовым плагином (install=`true`, без docker) и base="develop",
-// чтобы createWorktree не запускал `meteor npm install` в фикстуре.
+// wt.config.ts with a test plugin (install=`true`, no docker) and base="develop",
+// so that createWorktree does not run `meteor npm install` in the fixture.
 const FORK_CONFIG = `
 import { defineWorkspace } from ${JSON.stringify(CONFIG_SRC)};
 import { registerPlugin, PLUGIN_API_VERSION } from ${JSON.stringify(resolve(import.meta.dir, "../src/plugin"))};
@@ -327,9 +327,9 @@ export default defineWorkspace({
 `;
 
 /**
- * Фикстура: реальный git-репо проект `proj` на ветке `main` со СТРОННИМ коммитом
- * поверх tip ветки `develop`. base config = "develop". Ожидание: новая worktree-ветка
- * форкается от `develop`, а не от текущего HEAD (`main` со стрэй-коммитом).
+ * Fixture: a real git repo project `proj` on branch `main` with a STRAY commit
+ * on top of the `develop` tip. base config = "develop". Expectation: the new worktree branch
+ * forks from `develop`, not from the current HEAD (`main` with the stray commit).
  */
 async function makeForkOrch(): Promise<string> {
   const orch = mkdtempSync(resolve(tmpdir(), "wt-fork-"));
@@ -345,9 +345,9 @@ async function makeForkOrch(): Promise<string> {
   writeFileSync(resolve(pdir, "a.txt"), "base\n");
   await git(pdir, "add", "-A");
   await git(pdir, "commit", "-q", "-m", "base");
-  // develop указывает на base tip
+  // develop points at the base tip
   await git(pdir, "branch", "develop");
-  // СТРЭЙ-коммит на main поверх develop tip
+  // STRAY commit on main on top of the develop tip
   writeFileSync(resolve(pdir, "b.txt"), "stray\n");
   await git(pdir, "add", "-A");
   await git(pdir, "commit", "-q", "-m", "stray on main");
@@ -360,19 +360,19 @@ test("createWorktree: branch uses configured prefix and forks from branches.base
   try {
     const r = await createWorktree(orch, "proj", "myfeat");
 
-    // префикс из конфига
+    // prefix from the config
     expect(r.branch).toBe("feature/myfeat");
 
     const baseTip = await git(pdir, "rev-parse", "develop");
     const strayTip = await git(pdir, "rev-parse", "main");
     const newTip = await git(pdir, "rev-parse", "feature/myfeat");
 
-    // новая ветка стартует с tip'а base (develop), не с main
+    // the new branch starts from the base tip (develop), not from main
     expect(newTip).toBe(baseTip);
     const mb = await git(pdir, "merge-base", "feature/myfeat", "develop");
     expect(mb).toBe(baseTip);
 
-    // стрэй-коммит main НЕ предок новой ветки
+    // main's stray commit is NOT an ancestor of the new branch
     const isAncestor = await (async () => {
       const proc = Bun.spawn(
         ["git", "-C", pdir, "merge-base", "--is-ancestor", strayTip, newTip],

@@ -39,7 +39,7 @@ test("upsertEnvLine: empty / preserve other / replace same", () => {
 test("setSettingsPort: nested replace + missing throws", () => {
   const j = { public: { serverUrl: "http://h:4000/" } };
   expect(setSettingsPort(j, "public.serverUrl", 4510)).toEqual({ public: { serverUrl: "http://h:4510/" } });
-  expect(() => setSettingsPort({ public: {} }, "public.serverUrl", 1)).toThrow(/нет/);
+  expect(() => setSettingsPort({ public: {} }, "public.serverUrl", 1)).toThrow(/missing/);
 });
 
 function meshOrch(): string {

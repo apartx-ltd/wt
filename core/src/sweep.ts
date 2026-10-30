@@ -1,6 +1,6 @@
-// wt sweep — поиск и снос worktree, чьи ветки уже смержены в GitLab.
-// Истина о «смержено» — состояние MR (squash-мержи делают git-ancestry бесполезной).
-// classifySweep — чистая функция над собранными фактами; сеть/git только в сборщике.
+// wt sweep — finds and removes worktrees whose branches are already merged in GitLab.
+// The source of truth for "merged" is the MR state (squash merges make git ancestry useless).
+// classifySweep is a pure function over the collected facts; network/git only in the collector.
 
 import type { Worktree } from "#shared";
 import { listWorktrees } from "./worktrees";
@@ -12,21 +12,21 @@ import { resolveProjectsDir } from "./config";
 export interface MrInfo {
   iid: number;
   state: "opened" | "closed" | "locked" | "merged";
-  /** SHA последнего коммита source-ветки (на момент мержа для merged). */
+  /** SHA of the source branch's last commit (as of the merge, for merged). */
   sha: string;
 }
 
 export interface WorktreeFacts {
   project: string;
   slug: string;
-  branch: string; // "" для detached
+  branch: string; // "" for detached
   path: string;
   detached: boolean;
   dirty: boolean;
-  /** live = origin/<branch> существует; gone = был upstream, ветку удалили; none = не пушилась. */
+  /** live = origin/<branch> exists; gone = there was an upstream, the branch was deleted; none = never pushed. */
   upstream: "live" | "gone" | "none";
-  aheadOfUpstream: number; // считается только при upstream === "live"
-  /** HEAD == sha смерженного MR или его предок (защита от коммитов после мержа). */
+  aheadOfUpstream: number; // only computed when upstream === "live"
+  /** HEAD == sha of the merged MR or an ancestor of it (guards against commits made after the merge). */
   headMatchesMergedMr: boolean;
   mrs: MrInfo[];
   diskBytes: number;
@@ -60,7 +60,7 @@ export function classifySweep(f: WorktreeFacts): SweepDecision {
   return { action: "sweep", reason: "merged", mr: merged.iid };
 }
 
-/** "git@gitlab.com:g/p.git" | "https://gitlab.com/g/p(.git)" → "g/p"; не-GitLab → null. */
+/** "git@gitlab.com:g/p.git" | "https://gitlab.com/g/p(.git)" → "g/p"; non-GitLab → null. */
 export function parseGitlabProjectPath(remoteUrl: string): string | null {
   const m = remoteUrl.trim().match(/^(?:git@gitlab\.com:|https:\/\/gitlab\.com\/)(.+?)(?:\.git)?\/?$/);
   return m ? m[1] : null;
@@ -76,7 +76,7 @@ async function shOut(cmd: string[], cwd?: string): Promise<ShOut> {
   return { ok: (await proc.exited) === 0, stdout: stdout.trim(), stderr: stderr.trim() };
 }
 
-/** glab с ретраями: rate-limit/сетевые сбои GitLab транзиентны, один отказ не должен ронять прогон. */
+/** glab with retries: GitLab rate limits/network failures are transient, a single failure must not abort the run. */
 async function fetchMrs(glProject: string, branch: string): Promise<MrInfo[]> {
   const enc = encodeURIComponent(glProject);
   const url = `projects/${enc}/merge_requests?source_branch=${encodeURIComponent(branch)}&state=all&per_page=100`;
@@ -93,7 +93,7 @@ async function fetchMrs(glProject: string, branch: string): Promise<MrInfo[]> {
   throw new Error(`glab api merge_requests(${glProject}, ${branch}): ${lastErr || "failed"} — glab auth status?`);
 }
 
-/** fetch --prune + починка origin/HEAD; один раз на проект. */
+/** fetch --prune + repair origin/HEAD; once per project. */
 async function prepProject(pdir: string): Promise<void> {
   await shOut(["git", "-C", pdir, "fetch", "--prune", "origin"]);
   await shOut(["git", "-C", pdir, "remote", "set-head", "origin", "-a"]);
@@ -155,9 +155,9 @@ export async function collectSweepFacts(orch: string): Promise<SweepItem[]> {
   return out;
 }
 
-/** Снос одного кандидата: removeWorktree (сам стопит инстанс) + форс-удаление ветки.
- * НЕ dropBranch: тот выводит ветку как prefix+slug (slug ≠ ветка у части worktree)
- * и использует `branch -d`, отказывающий squash-смерженным. Мерж подтверждён GitLab API. */
+/** Remove one candidate: removeWorktree (stops the instance itself) + force-delete the branch.
+ * NOT dropBranch: that one derives the branch as prefix+slug (slug ≠ branch for some worktrees)
+ * and uses `branch -d`, which refuses squash-merged branches. The merge is confirmed by the GitLab API. */
 export async function sweepOne(orch: string, item: SweepItem): Promise<void> {
   await removeWorktree(orch, item.project, item.slug, {});
   const pdir = projectDir(orch, item.project, await resolveProjectsDir(orch));

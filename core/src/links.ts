@@ -14,29 +14,29 @@ export interface Link {
   key: string;
 }
 
-/** Разбор одной строки `consumer:target:mechanism:key`. */
+/** Parse one `consumer:target:mechanism:key` string. */
 export function parseLinkSpec(spec: string): Link {
   const [consumer, target, mechanism, key] = spec.split(":");
   return { consumer, target, mechanism: mechanism as LinkMechanism, key };
 }
 
-/** Все upstream-линки потребителя из набора спеков (резолв; применение слоёв — applyLinks). */
+/** All upstream links of a consumer from a set of specs (resolution only; applying the layers is applyLinks). */
 export function resolveLinks(specs: readonly string[], consumer: string): Link[] {
   return specs.map(parseLinkSpec).filter((l) => l.consumer === consumer);
 }
 
-/** `wt unlink`: убрать env/settings-слои линка → вернуться к репо-дефолтам. Паритет cmd_unlink. */
+/** `wt unlink`: remove the link's env/settings layers → back to the repo defaults. Parity with cmd_unlink. */
 export async function removeLinks(orch: string, project: string, slug: string): Promise<void> {
   await unlink(ovrFilePath(orch, project, slug)).catch(() => {});
   await unlink(envFilePath(orch, project, slug)).catch(() => {});
 }
 
-/** Заменить порт в `:NNNN(/|конец)` на `:port`. Паритет port_swap (sed). */
+/** Replace the port in `:NNNN(/|end)` with `:port`. Parity with port_swap (sed). */
 export function portSwap(value: string, port: number): string {
   return value.replace(/:[0-9]+(\/|$)/, `:${port}$1`);
 }
 
-/** Upsert строки `key=value` в содержимое env-слоя (выкинуть прежние `^key=`, дописать). Паритет write_env_link. */
+/** Upsert a `key=value` line into the env layer contents (drop previous `^key=` lines, append). Parity with write_env_link. */
 export function upsertEnvLine(content: string, key: string, value: string): string {
   const lines = content.length ? content.split("\n") : [];
   if (lines.length && lines[lines.length - 1] === "") lines.pop();
@@ -45,16 +45,16 @@ export function upsertEnvLine(content: string, key: string, value: string): stri
   return kept.join("\n") + "\n";
 }
 
-/** Port-swap листа по dotted-пути в settings-объекте (мутирует+возвращает). Кидает если путь отсутствует. Паритет node-вставки write_settings_link. */
+/** Port-swap the leaf at a dotted path in a settings object (mutates + returns). Throws if the path is missing. Parity with the node snippet in write_settings_link. */
 export function setSettingsPort(json: any, keyPath: string, port: number): any {
   const ks = keyPath.split(".");
   let o = json;
   for (let i = 0; i < ks.length - 1; i++) {
-    if (o[ks[i]] == null) throw new Error(`нет ${keyPath}`);
+    if (o[ks[i]] == null) throw new Error(`missing ${keyPath}`);
     o = o[ks[i]];
   }
   const last = ks[ks.length - 1];
-  if (o[last] == null) throw new Error(`нет ${keyPath}`);
+  if (o[last] == null) throw new Error(`missing ${keyPath}`);
   o[last] = portSwap(String(o[last]), port);
   return json;
 }
@@ -65,7 +65,7 @@ export interface LinkOutcome {
   mechanism: LinkMechanism;
   key: string;
   status: LinkStatus;
-  /** для env-written — новое значение; для settings-written — `:port` */
+  /** for env-written — the new value; for settings-written — `:port` */
   value?: string;
 }
 
@@ -100,7 +100,7 @@ async function writeSettingsLink(
   else if (existsSync(resolve(dir, "settings.json"))) src = resolve(dir, "settings.json");
   if (!src) return { status: "skip-no-source" };
   const out = ovrFilePath(orch, consumer, slug);
-  const from = existsSync(out) ? out : src; // копим несколько settings-линков в одном override
+  const from = existsSync(out) ? out : src; // accumulate several settings links in one override
   const json = JSON.parse(await readFile(from, "utf8"));
   setSettingsPort(json, keyPath, port);
   await mkdir(dirname(out), { recursive: true });
@@ -109,9 +109,9 @@ async function writeSettingsLink(
 }
 
 /**
- * `wt link`: применить env/settings-слои для апстримов consumer'а. Порт цели берётся
- * из её `.env.worktree` (`lslug`-worktree). `filter` ограничивает одной целью
- * (start --server). Паритет apply_links. НЕ кидает (решение по выводу — у вызывающего).
+ * `wt link`: apply the env/settings layers for the consumer's upstreams. The target's port is taken
+ * from its `.env.worktree` (the `lslug` worktree). `filter` restricts it to a single target
+ * (start --server). Parity with apply_links. Does NOT throw (the caller decides from the outcome).
  */
 export async function applyLinks(
   orch: string,

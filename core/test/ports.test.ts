@@ -78,7 +78,7 @@ test("allocateOffset skips contiguous taken slots", () => {
   expect(allocateOffset(led, "a", "w")).toBe(40);
 });
 
-// --- BLOCKED_PORTS: 5000/7000 держит системный ControlCenter (AirPlay) ---
+// --- BLOCKED_PORTS: 5000/7000 are held by the system ControlCenter (AirPlay) ---
 
 test("isBlockedPort covers the macOS AirPlay pair and nothing else", () => {
   expect(BLOCKED_PORTS).toEqual([5000, 7000]);
@@ -88,7 +88,7 @@ test("isBlockedPort covers the macOS AirPlay pair and nothing else", () => {
 });
 
 test("allocateOffset skips an offset that lands on a blocked port", () => {
-  // basePort 4000: offset 3000 дал бы 7000 — берём следующий свободный.
+  // basePort 4000: offset 3000 would give 7000 — take the next free one.
   expect(allocateOffset([], "a", "b", 4000)).toBe(10);
   const led: LedgerRow[] = Array.from({ length: 299 }, (_, i) => ({
     project: "a", branch: `b${i}`, offset: (i + 1) * STEP,
@@ -99,7 +99,7 @@ test("allocateOffset skips an offset that lands on a blocked port", () => {
 test("allocateOffset moves a known branch off a blocked port", () => {
   const led: LedgerRow[] = [{ project: "apartx-server", branch: "feat", offset: 3000 }];
   expect(allocateOffset(led, "apartx-server", "feat", 4000)).toBe(10);
-  // Без basePort поведение прежнее — существующий offset возвращается как есть.
+  // Without basePort the behavior is unchanged — the existing offset is returned as is.
   expect(allocateOffset(led, "apartx-server", "feat")).toBe(3000);
 });
 
@@ -152,7 +152,7 @@ test("deterministicAuxBasePort is stable and dockerized-indexed (8085 + sorted i
 });
 
 test("deterministicAuxBasePort throws for a project outside the dockerized set", () => {
-  expect(() => deterministicAuxBasePort("apartx-spaces", 8085, DOCKERIZED)).toThrow(/не входит в dockerized/);
+  expect(() => deterministicAuxBasePort("apartx-spaces", 8085, DOCKERIZED)).toThrow(/is not among the config's dockerized/);
 });
 
 test("resolveAuxBasePort prefers the env-override (spec.envKey) over the deterministic base", async () => {

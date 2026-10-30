@@ -25,53 +25,53 @@ test("detached HEAD → manual", () => {
     .toEqual({ action: "manual", reason: "detached" });
 });
 
-test("dirty tree → skip даже при merged MR", () => {
+test("dirty tree → skip even with a merged MR", () => {
   expect(classifySweep({ ...base, dirty: true }))
     .toEqual({ action: "skip", reason: "dirty" });
 });
 
-test("открытый MR → skip open-mr", () => {
+test("open MR → skip open-mr", () => {
   expect(classifySweep({ ...base, mrs: [{ iid: 7, state: "opened", sha: "abc" }] }))
     .toEqual({ action: "skip", reason: "open-mr", mr: 7 });
 });
 
-test("merged И открытый MR (переоткрыли) → skip open-mr", () => {
+test("merged AND open MR (reopened) → skip open-mr", () => {
   expect(classifySweep({
     ...base,
     mrs: [{ iid: 42, state: "merged", sha: "abc" }, { iid: 50, state: "opened", sha: "def" }],
   })).toEqual({ action: "skip", reason: "open-mr", mr: 50 });
 });
 
-test("нет MR вообще → skip no-mr", () => {
+test("no MR at all → skip no-mr", () => {
   expect(classifySweep({ ...base, mrs: [] })).toEqual({ action: "skip", reason: "no-mr" });
 });
 
-test("только закрытый без мержа MR → skip closed-mr", () => {
+test("only an MR closed without merging → skip closed-mr", () => {
   expect(classifySweep({ ...base, mrs: [{ iid: 9, state: "closed", sha: "abc" }] }))
     .toEqual({ action: "skip", reason: "closed-mr", mr: 9 });
 });
 
-test("upstream жив, есть unpushed-коммиты → skip unpushed", () => {
+test("upstream live, unpushed commits present → skip unpushed", () => {
   expect(classifySweep({ ...base, upstream: "live", aheadOfUpstream: 2 }))
     .toEqual({ action: "skip", reason: "unpushed" });
 });
 
-test("upstream жив, unpushed нет → sweep", () => {
+test("upstream live, nothing unpushed → sweep", () => {
   expect(classifySweep({ ...base, upstream: "live", aheadOfUpstream: 0 }))
     .toEqual({ action: "sweep", reason: "merged", mr: 42 });
 });
 
-test("remote-ветка удалена, HEAD не совпадает с sha мержа → skip commits-after-merge", () => {
+test("remote branch deleted, HEAD does not match the merge sha → skip commits-after-merge", () => {
   expect(classifySweep({ ...base, headMatchesMergedMr: false }))
     .toEqual({ action: "skip", reason: "commits-after-merge" });
 });
 
-test("ветка ни разу не пушилась (upstream none, MR нет) → skip no-mr", () => {
+test("branch never pushed (upstream none, no MR) → skip no-mr", () => {
   expect(classifySweep({ ...base, upstream: "none", mrs: [] }))
     .toEqual({ action: "skip", reason: "no-mr" });
 });
 
-test("parseGitlabProjectPath: ssh и https формы", () => {
+test("parseGitlabProjectPath: ssh and https forms", () => {
   expect(parseGitlabProjectPath("git@gitlab.com:apartx/apartx-cabinet.git"))
     .toBe("apartx/apartx-cabinet");
   expect(parseGitlabProjectPath("https://gitlab.com/apartx/apartx-server.git"))
