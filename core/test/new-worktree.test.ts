@@ -2,7 +2,7 @@ import { test, expect, beforeAll } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { BASE_SLUG, computeWorktreeEnv, commitWorktreeEnv, regenerateWorktreeEnvPreserving, createWorktree, removeWorktree, instanceVolumes } from "../src/new-worktree";
+import { BASE_SLUG, computeWorktreeEnv, commitWorktreeEnv, regenerateWorktreeEnvPreserving, createWorktree, removeWorktree, instanceVolumes, installMounts } from "../src/new-worktree";
 import { readLedger } from "../src/ports";
 import { registerBundledPlugins } from "#plugins";
 
@@ -480,4 +480,15 @@ test("instanceVolumes: the plugin's owned volumes; the legacy meteor pair when t
   expect(instanceVolumes(await loadPlugin("@apartx/wt/plugin-node"), ctx)).toEqual(["wtdev-api-feat-node_modules"]);
   expect(instanceVolumes({ name: "bare", install: () => ({ argv: [] }), devCommand: () => ({ argv: [] }) }, ctx))
     .toEqual(["wtdev-api-feat-node_modules", "wtdev-api-feat-meteor_local"]);
+});
+
+test("installMounts: the plugin's docker mounts, then the project's docker.mounts resolved against the workspace", async () => {
+  registerBundledPlugins();
+  const { loadPlugin } = await import("../src/plugin");
+  const ctx = { worktreeDir: "/o/worktrees/api/feat", container: "wtdev-api-feat" } as any;
+  const config = { plugin: "@apartx/wt/plugin-rust", docker: { image: "img:1", mounts: ["./local:/opt/local:ro"] } } as any;
+  const mounts = installMounts(await loadPlugin("@apartx/wt/plugin-rust"), ctx, config, "/o");
+  expect(mounts[0]).toBe("/o/worktrees/api/feat:/opt/app");
+  expect(mounts[mounts.length - 1]).toBe("/o/local:/opt/local:ro");
+  expect(installMounts(await loadPlugin("@apartx/wt/plugin-rust"), ctx, { ...config, docker: { image: "img:1" } }, "/o")).not.toContain("/o/local:/opt/local:ro");
 });

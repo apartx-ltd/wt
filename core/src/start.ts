@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { spawn as cpSpawn } from "node:child_process";
 import { containerName, dockerRemove } from "./containers";
 import { BASE_SLUG, regenerateWorktreeEnvPreserving } from "./new-worktree";
-import { resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, type ResolvedProjectConfig } from "./config";
+import { resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, type ResolvedProjectConfig, withProjectMounts } from "./config";
 import { loadPlugin, type InstanceCtx, type StackPlugin } from "./plugin";
 import { applyLinks } from "./links";
 import {
@@ -610,10 +610,12 @@ async function startDockerized(
     port, offset: 0, container, mode: "docker", settingsPath: null, extraPorts: {}, projectsDir,
   });
   const dockerSpec = plugin.docker?.(specCtx) ?? { mounts: [] };
+  // the plugin's volumes, then the project's own `docker.mounts` (files outside the worktree)
+  const mounts = withProjectMounts(dockerSpec.mounts, config.docker, orch);
 
   // Dependency install comes after dockerSpec: both the volume layout and the command itself come
   // from the plugin (meteor → `meteor npm install` + meteor volumes, node → `npm install` without them).
-  await ensureDeps(dir, container, config.docker!.image, dockerSpec.mounts, plugin.install(specCtx).argv, plugin.deps);
+  await ensureDeps(dir, container, config.docker!.image, mounts, plugin.install(specCtx).argv, plugin.deps);
 
   const envFile = await renderEnvFile(orch, project, slug, host, dockerSpec.envLineFilter, projectsDir);
   const settingsMount = await renderDockerSettings(orch, project, slug, host, projectsDir);
@@ -642,7 +644,7 @@ async function startDockerized(
   const dockerEnv = baseCheckoutDockerEnv(slug, dockerSpec.env, plugin.envLines?.(ctx) ?? []);
   const args = buildDockerRunArgs({
     container, port, envFile, extraPorts,
-    mounts: dockerSpec.mounts, addHosts, innerCmd, image: config.docker!.image, settingsMount,
+    mounts, addHosts, innerCmd, image: config.docker!.image, settingsMount,
     dockerEnv,
   });
   await shInherit(["docker", ...args], {

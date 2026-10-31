@@ -5,7 +5,7 @@ import { resolveBasePort, resolveAuxBasePort, readLedger, allocateOffset, append
 import { generateEnvWorktree, branchDbSuffix } from "./env-worktree";
 import { containerName } from "./containers";
 import { loadPlugin, type EnvCtx, type InstanceCtx, type StackPlugin } from "./plugin";
-import { loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, resolvePortStep } from "./config";
+import { loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, resolvePortStep, withProjectMounts, type ResolvedProjectConfig } from "./config";
 import { stopInstance } from "./run";
 import { installDockerDeps, installHostDeps } from "./deps";
 import {
@@ -265,7 +265,7 @@ export async function createWorktree(
   };
   const installArgv = plugin.install(installCtx).argv;
   if (config.docker?.image) {
-    await installDockerDeps(dir, cn, config.docker!.image, plugin.docker!(installCtx).mounts, installArgv, plugin.deps);
+    await installDockerDeps(dir, cn, config.docker!.image, installMounts(plugin, installCtx, config, orch), installArgv, plugin.deps);
   } else {
     await installHostDeps(dir, installArgv, plugin.deps);
   }
@@ -288,6 +288,11 @@ export async function createWorktree(
   }
 
   return { dir, branch, port: computed.port, offset: computed.offset };
+}
+
+/** Mounts of the install container: the plugin's `docker()` mounts, then the project's `docker.mounts`. */
+export function installMounts(plugin: StackPlugin, ctx: InstanceCtx, config: ResolvedProjectConfig, orch: string): string[] {
+  return withProjectMounts(plugin.docker?.(ctx).mounts ?? [], config.docker, orch);
 }
 
 /**

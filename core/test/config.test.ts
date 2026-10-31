@@ -290,7 +290,7 @@ test("resolveConfig: a project's docker.mounts replaces the defaults' array, no 
   const cfg = resolveConfig({
     projectsDir: "projects",
     defaults: { plugin: "@apartx/wt/plugin-rust", docker: { image: "img:1", mounts: ["/a:/a"] } },
-    projects: { api: { docker: { mounts: ["/b:/b"] } }, web: {} },
+    projects: { api: { docker: { image: "img:1", mounts: ["/b:/b"] } }, web: {} },
   });
   expect(cfg.projects?.api?.docker?.mounts).toEqual(["/b:/b"]);
   expect(cfg.projects?.web?.docker?.mounts).toEqual(["/a:/a"]);

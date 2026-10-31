@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { baseCheckoutDockerEnv, buildDockerRunArgs, devHost, buildHostDevArgs, buildHostMeteorArgs, remapEnvLine, remapSettingsHosts, renderEnvFile, shInherit, spawnDetached, type StartOptions } from "../src/start";
 import { BASE_SLUG } from "../src/new-worktree";
 import type { StackPlugin } from "../src/plugin";
-import type { ResolvedProjectConfig } from "../src/config";
+import { withProjectMounts, type ResolvedProjectConfig } from "../src/config";
 import { readFile } from "node:fs/promises";
 
 // Mounts/addHosts/innerCmd/image now come from the plugin (meteor) — the core only assembles
@@ -49,6 +49,14 @@ test("buildDockerRunArgs: core shape (no dev-host, no settings)", () => {
     "meteor-dev:3.4",
     "sh", "-c", "meteor run --port 4010",
   ]);
+});
+
+test("buildDockerRunArgs: project mounts follow the plugin's mounts, before -w", () => {
+  const args = buildDockerRunArgs({ ...base, mounts: withProjectMounts(base.mounts, { image: base.image, mounts: ["/w/local:/w/local:ro"] }, "/orch") });
+  const i = args.indexOf("/w/local:/w/local:ro");
+  expect(args[i - 1]).toBe("-v");
+  expect(args.indexOf("meteor_base:/root")).toBeLessThan(i);
+  expect(args.indexOf("-w")).toBeGreaterThan(i);
 });
 
 test("buildDockerRunArgs: with dev-host adds second --add-host", () => {
