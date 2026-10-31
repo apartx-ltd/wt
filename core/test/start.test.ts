@@ -176,6 +176,15 @@ test("remapEnvLine: localhost→host except ROOT_URL", () => {
   expect(remapEnvLine("X=http://127.0.0.1:9", "dev.local")).toBe("X=http://dev.local:9");
 });
 
+test("remapEnvLine leaves the keys in keepLocalhost alone (browser-facing origins), the rest is remapped", () => {
+  const keep = ["ORIGIN", "PUBLIC_URL"];
+  expect(remapEnvLine("ORIGIN=http://localhost:5213", "dev.local", undefined, keep)).toBe("ORIGIN=http://localhost:5213");
+  expect(remapEnvLine("PUBLIC_URL=http://127.0.0.1:5213/x", "dev.local", undefined, keep)).toBe("PUBLIC_URL=http://127.0.0.1:5213/x");
+  expect(remapEnvLine("API_URL=http://127.0.0.1:8110", "dev.local", undefined, keep)).toBe("API_URL=http://dev.local:8110");
+  expect(remapEnvLine("ORIGIN_X=http://localhost:1", "dev.local", undefined, keep)).toBe("ORIGIN_X=http://dev.local:1");
+  expect(remapEnvLine("ROOT_URL=http://localhost:3701", "dev.local", undefined, keep)).toBe("ROOT_URL=http://localhost:3701");
+});
+
 it("remapEnvLine no longer injects mongo directConnection on its own", () => {
   expect(remapEnvLine("MONGO_URL=mongodb://localhost/db", "h"))
     .toBe("MONGO_URL=mongodb://h/db"); // host remapped, NO directConnection

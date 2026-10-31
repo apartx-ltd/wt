@@ -20,6 +20,12 @@ export interface DockerConfig {
   storage?: DockerStorage;
   /** Directory of the `"dir"` storage, relative to the workspace root unless absolute. Default `var/volumes`. */
   storageDir?: string;
+  /**
+   * Env keys whose `localhost`/`127.0.0.1` is the browser's, not the container's (a public
+   * origin, a link base): left as is by the container remap, which rewrites every other value
+   * to the host. `ROOT_URL` is always left alone.
+   */
+  keepLocalhost?: string[];
 }
 
 /** A named docker volume as a mount source: `cargo_git`, `meteor_base`. No `/` and no `.`: a dotted name (`config.toml:/opt/x`) is almost always a file path that lost its `./`. */
@@ -192,6 +198,10 @@ export function validateConfig(config: WorkspaceConfig, repoName = "app"): Resol
     const storage = pc.docker?.storage;
     if (storage !== undefined && storage !== "volume" && storage !== "dir") {
       throw new Error(`wt.config: project ${name}: docker.storage must be "volume" or "dir" (got ${JSON.stringify(storage)})`);
+    }
+    const keep = pc.docker?.keepLocalhost;
+    if (keep !== undefined && (!Array.isArray(keep) || keep.some((k) => typeof k !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)))) {
+      throw new Error(`wt.config: project ${name}: docker.keepLocalhost must be a list of env key names (got ${JSON.stringify(keep)})`);
     }
     const storageDir = pc.docker?.storageDir;
     if (storageDir !== undefined && (typeof storageDir !== "string" || !storageDir.trim())) {

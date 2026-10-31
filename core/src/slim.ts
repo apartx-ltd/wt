@@ -174,9 +174,11 @@ export async function collectSlimFacts(
   return { items, orphanVolumes: findOrphanVolumes(allVolumes, owned), orphanVolumeDirs };
 }
 
-/** `rm -rf` of orphan dir-storage volume directories. */
-export async function removeVolumeDirs(dirs: string[]): Promise<void> {
-  for (const d of dirs) await rm(d, { recursive: true, force: true });
+/** `rm -rf` of orphan dir-storage volume directories; returns the ones that could not be removed (contents owned by root on a Linux host). */
+export async function removeVolumeDirs(dirs: string[]): Promise<string[]> {
+  const kept: string[] = [];
+  for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => kept.push(d));
+  return kept;
 }
 
 /** `docker volume rm` one by one; returns the ones docker refused to remove (held by a container). */
@@ -193,12 +195,15 @@ export interface SlimOutcome {
   started: boolean;
   /** volumes docker refused to remove (held by a container) — they remain. */
   keptVolumes: string[];
+  /** host directories that could not be removed (contents owned by root on a Linux host) — they remain. */
+  keptDirs: string[];
 }
 
 export async function slimOne(orch: string, item: SlimItem): Promise<SlimOutcome> {
   const alive = await listRunningInstances(orch);
   if (alive.some((i) => i.project === item.project && i.slug === item.slug))
-    return { started: true, keptVolumes: [] };
-  for (const d of item.dirs) await rm(d.path, { recursive: true, force: true });
-  return { started: false, keptVolumes: await removeVolumes(item.volumes) };
+    return { started: true, keptVolumes: [], keptDirs: [] };
+  const keptDirs: string[] = [];
+  for (const d of item.dirs) await rm(d.path, { recursive: true, force: true }).catch(() => keptDirs.push(d.path));
+  return { started: false, keptVolumes: await removeVolumes(item.volumes), keptDirs };
 }

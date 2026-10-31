@@ -380,8 +380,10 @@ async function cmdSlim() {
     if (toSlim.length || orphanVolumes.length || orphanVolumeDirs.length) console.log("dry-run — to execute: wt slim --apply");
     return;
   }
-  await removeVolumeDirs(orphanVolumeDirs);
-  if (orphanVolumeDirs.length) console.log(`orphan volume directories removed: ${orphanVolumeDirs.length}`);
+  const keptDirs = await removeVolumeDirs(orphanVolumeDirs);
+  if (orphanVolumeDirs.length)
+    console.log(`orphan volume directories removed: ${orphanVolumeDirs.length - keptDirs.length}` +
+      (keptDirs.length ? ` (could not remove, see the owner of their contents: ${keptDirs.join(", ")})` : ""));
   const keptOrphans = await removeVolumes(orphanVolumes);
   console.log(`orphan volumes removed: ${orphanVolumes.length - keptOrphans.length}` +
     (keptOrphans.length ? ` (in use, kept: ${keptOrphans.join(", ")})` : ""));
@@ -391,7 +393,8 @@ async function cmdSlim() {
       console.log(`skipped ${i.project}/${i.slug}: it was started in the meantime`);
       continue;
     }
-    const kept = r.keptVolumes.length ? ` (volumes in use, kept: ${r.keptVolumes.join(", ")})` : "";
+    const kept = (r.keptVolumes.length ? ` (volumes in use, kept: ${r.keptVolumes.join(", ")})` : "") +
+      (r.keptDirs.length ? ` (could not remove: ${r.keptDirs.join(", ")})` : "");
     console.log(`cleaned ${i.project}/${i.slug}${kept}`);
   }
   console.log(`done: ~${fmtGb(gb)} on the host; wt start will restore the dependencies`);

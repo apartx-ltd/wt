@@ -1,5 +1,5 @@
 import { test, expect, beforeAll } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { BASE_SLUG, computeWorktreeEnv, commitWorktreeEnv, regenerateWorktreeEnvPreserving, createWorktree, removeWorktree, instanceVolumes, installMounts } from "../src/new-worktree";
@@ -522,6 +522,69 @@ export default defineWorkspace({
     expect(existsSync(wdir)).toBe(false);
     expect(asked).toEqual([["wtdev-proj-x-node_modules"]]);
   } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
+});
+
+async function gitRepo(pdir: string): Promise<void> {
+  mkdirSync(pdir, { recursive: true });
+  for (const a of [["init", "-q", "-b", "main"], ["config", "user.email", "t@t.t"], ["config", "user.name", "t"], ["commit", "-q", "--allow-empty", "-m", "init"]]) {
+    const proc = Bun.spawn(["git", "-C", pdir, ...a], { stdout: "ignore", stderr: "ignore" });
+    if ((await proc.exited) !== 0) throw new Error(`git ${a.join(" ")} failed`);
+  }
+}
+
+test("createWorktree of a dockerized project refuses before touching git when the image is not available locally", async () => {
+  const orch = mkdtempSync(resolve(tmpdir(), "wt-new-noimage-"));
+  try {
+    const pdir = resolve(orch, "projects", "proj");
+    writeFileSync(resolve(orch, "wt.config.ts"), `
+import { defineWorkspace } from ${JSON.stringify(resolve(import.meta.dir, "../src/config"))};
+export default defineWorkspace({
+  projects: { proj: { plugin: "@apartx/wt/plugin-node", docker: { image: "proj-dev:1" } } },
+});
+`);
+    mkdirSync(resolve(orch, "var"), { recursive: true });
+    await gitRepo(pdir);
+    const asked: string[] = [];
+    await expect(createWorktree(orch, "proj", "x", { imageExists: async (image) => { asked.push(image); return false; } }))
+      .rejects.toThrow(/image proj-dev:1 not found locally — build it first/);
+    expect(asked).toEqual(["proj-dev:1"]);
+    expect(existsSync(resolve(orch, "worktrees", "proj", "x"))).toBe(false);
+    const branches = Bun.spawn(["git", "-C", pdir, "branch", "--list", "feature/x"], { stdout: "pipe" });
+    expect((await new Response(branches.stdout).text()).trim()).toBe("");
+  } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
+});
+
+test("removeWorktree in dir storage: a volume directory it cannot delete is reported and left behind, the worktree still goes", async () => {
+  const orch = mkdtempSync(resolve(tmpdir(), "wt-rm-eacces-"));
+  const vdir = resolve(orch, "var", "volumes", "wtdev-proj-x-node_modules");
+  try {
+    const pdir = resolve(orch, "projects", "proj");
+    writeFileSync(resolve(orch, "wt.config.ts"), `
+import { defineWorkspace } from ${JSON.stringify(resolve(import.meta.dir, "../src/config"))};
+export default defineWorkspace({
+  projects: { proj: { plugin: "@apartx/wt/plugin-node", docker: { image: "node:22", storage: "dir" } } },
+});
+`);
+    mkdirSync(resolve(orch, "var"), { recursive: true });
+    await gitRepo(pdir);
+    const wdir = resolve(orch, "worktrees", "proj", "x");
+    const add = Bun.spawn(["git", "-C", pdir, "worktree", "add", "-q", wdir, "-b", "feature/x"], { stdout: "ignore", stderr: "ignore" });
+    expect(await add.exited).toBe(0);
+    mkdirSync(vdir, { recursive: true });
+    writeFileSync(resolve(vdir, "stamp"), "x");
+    chmodSync(vdir, 0o500); // no write permission: unlinking stamp fails with EACCES (as root-owned contents do on Linux)
+
+    const warnings: string[] = [];
+    await removeWorktree(orch, "proj", "x", { removeVolumes: async () => {}, warn: (m) => { warnings.push(m); } });
+    expect(existsSync(wdir)).toBe(false);
+    expect(existsSync(resolve(vdir, "stamp"))).toBe(true);
+    expect(warnings.join("\n")).toMatch(/could not remove .*wtdev-proj-x-node_modules.*remove it manually/);
+  } finally {
+    chmodSync(vdir, 0o700);
     rmSync(orch, { recursive: true, force: true });
   }
 });

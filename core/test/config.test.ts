@@ -336,3 +336,21 @@ test("docker.storage and docker.storageDir: accepted values, inherited from defa
   expect(cfg.projects.api?.docker).toEqual({ image: "i", storage: "dir", storageDir: "./cache/volumes" });
   expect(cfg.projects.web?.docker).toEqual({ image: "w", storage: "volume", storageDir: "./cache/volumes" });
 });
+
+test("docker.keepLocalhost: a list of env keys, inherited from defaults, invalid entries rejected", () => {
+  const ok = (docker: any) => validateConfig({
+    projectsDir: "projects",
+    projects: { web: { plugin: "@apartx/wt/plugin-node", docker } },
+  });
+  expect(ok({ image: "i", keepLocalhost: ["ORIGIN", "PUBLIC_URL"] }).projects.web?.docker?.keepLocalhost).toEqual(["ORIGIN", "PUBLIC_URL"]);
+  expect(() => ok({ image: "i", keepLocalhost: "ORIGIN" })).toThrow(/wt\.config: project web: docker\.keepLocalhost/);
+  expect(() => ok({ image: "i", keepLocalhost: ["ORIGIN", ""] })).toThrow(/wt\.config: project web: docker\.keepLocalhost/);
+  expect(() => ok({ image: "i", keepLocalhost: ["ORIGIN=http://x"] })).toThrow(/wt\.config: project web: docker\.keepLocalhost/);
+  const cfg = resolveConfig({
+    projectsDir: "projects",
+    defaults: { plugin: "@apartx/wt/plugin-node", docker: { image: "i", keepLocalhost: ["ORIGIN"] } },
+    projects: { web: {}, api: { docker: { image: "a", keepLocalhost: [] } } },
+  });
+  expect(cfg.projects.web?.docker?.keepLocalhost).toEqual(["ORIGIN"]);
+  expect(cfg.projects.api?.docker?.keepLocalhost).toEqual([]);
+});

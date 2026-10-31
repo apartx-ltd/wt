@@ -201,6 +201,12 @@ export async function regenerateWorktreeEnvPreserving(
 export interface CreateWorktreeOpts {
   isolatedDb?: boolean;
   seed?: boolean;
+  /** test seam; default: `docker image inspect <image>`. */
+  imageExists?: (image: string) => Promise<boolean>;
+}
+
+async function dockerImageExists(image: string): Promise<boolean> {
+  return shOk(["docker", "image", "inspect", image]);
 }
 export interface CreateWorktreeResult {
   dir: string;
@@ -233,6 +239,11 @@ export async function createWorktree(
   // leave a half-made worktree and branch behind.
   const config = await resolveProjectConfig(orch, project);
   const plugin = await loadPlugin(config.plugin);
+  // The same for a dev image that is not built yet: the install would fail inside docker
+  // after the worktree and branch exist, and the rerun would hit "worktree already exists".
+  if (config.docker?.image && !(await (opts.imageExists ?? dockerImageExists)(config.docker.image))) {
+    throw new Error(`image ${config.docker.image} not found locally — build it first (docker.image of project ${project} in wt.config.ts)`);
+  }
 
   // Branch name and fork point come from config.branches (M2.5). The prefix governs slug↔branch,
   // base is the starting point of the new branch (apartx: "develop"), not the current HEAD of the base
@@ -319,6 +330,8 @@ export interface RemoveWorktreeOpts {
   dropBranch?: boolean;
   /** test seam; default: `docker volume rm` (failures ignored — a volume that never existed is fine). */
   removeVolumes?: (volumes: string[]) => Promise<void>;
+  /** where a non-fatal problem is reported; default: stderr. */
+  warn?: (message: string) => void;
 }
 
 /**
@@ -355,8 +368,14 @@ export async function removeWorktree(
     if (volumes.length) await removeVolumes(volumes);
     // dir storage: the volumes are directories under docker.storageDir — remove them too.
     // (A volume-mode leftover is covered by `docker volume rm` above, a dir-mode one by this.)
+    // A directory the user cannot delete (contents written as root by a Linux docker daemon) is
+    // reported and left behind: the worktree still goes, as it does when `docker volume rm` fails.
     if (config.docker.storage === "dir") {
-      for (const v of volumes) await rm(volumeDir(orch, v, config.docker.storageDir), { recursive: true, force: true });
+      const warn = opts.warn ?? ((m: string) => console.error(`wt: ${m}`));
+      for (const v of volumes) {
+        const d = volumeDir(orch, v, config.docker.storageDir);
+        await rm(d, { recursive: true, force: true }).catch((e: Error) => warn(`could not remove ${d} (${e.message}) — remove it manually, e.g. sudo rm -rf ${d}`));
+      }
     }
     await unlink(mergedEnvPath(orch, project, slug)).catch(() => {});
     await unlink(dockerSettingsPath(orch, project, slug)).catch(() => {});
