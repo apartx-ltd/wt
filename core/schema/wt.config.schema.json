@@ -44,7 +44,10 @@
     "dockerConfig": {
       "type": "object",
       "additionalProperties": false,
-      "properties": { "image": { "type": "string" } },
+      "properties": {
+        "image": { "type": "string" },
+        "mounts": { "type": "array", "items": { "type": "string" }, "description": "Extra -v entries appended after the plugin's mounts: /abs/host:/container[:ro], ./relative-to-workspace:/container or volume:/container." }
+      },
       "required": ["image"]
     },
     "coreSpec": {
