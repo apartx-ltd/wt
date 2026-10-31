@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Plugin contract: optional `upTimeoutMs` lets a plugin say how long `wt start` waits for the
+  instance port before reporting `did NOT come up in time`. Without it the core keeps its
+  10-minute wait.
 - New bundled plugin `@apartx/wt/plugin-rust` for cargo projects: `cargo fetch` / `cargo run`
   (or the project's `dev` cargo alias), the port reaches the binary through `PORT` only,
   `target/` is the restorable artifact; docker layout with a `target` volume per worktree and

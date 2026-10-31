@@ -178,13 +178,21 @@ async function releaseBuildLock(orch: string): Promise<void> {
   await rm(buildLockDir(orch), { recursive: true, force: true }).catch(() => {});
 }
 
+/** The core's wait for the instance port when the plugin declares no `upTimeoutMs`. */
+export const DEFAULT_UP_TIMEOUT_MS = 600_000;
+
+/** How long `wt start` waits for the port: the plugin's `upTimeoutMs`, else the core default. */
+export function upTimeoutMs(plugin: Pick<StackPlugin, "upTimeoutMs">): number {
+  return plugin.upTimeoutMs ?? DEFAULT_UP_TIMEOUT_MS;
+}
+
 /** Wait for the port to respond (build finished), or for the process to die / a timeout. Parity with wait_port_up. */
 export async function waitPortUp(
   port: number,
   opts: { pid?: number; deadlineMs?: number; probes?: AliveProbes } = {},
 ): Promise<boolean> {
   const probes = opts.probes ?? defaultProbes;
-  const deadline = Date.now() + (opts.deadlineMs ?? 600_000);
+  const deadline = Date.now() + (opts.deadlineMs ?? DEFAULT_UP_TIMEOUT_MS);
   while (Date.now() < deadline) {
     try {
       await fetch(`http://localhost:${port}`, { signal: AbortSignal.timeout(3000) });
@@ -569,7 +577,7 @@ async function startHost(
   try {
     const pid = spawnDetached(args[0]!, args.slice(1), dir, logFilePath(orch, project, slug), env);
     await writeFile(runFilePath(orch, project, slug), formatRunState({ pid, port, branch, started: Math.floor(Date.now() / 1000), project, slug, pgroup: true }));
-    const portUp = await waitPortUp(port, { pid, probes });
+    const portUp = await waitPortUp(port, { pid, probes, deadlineMs: upTimeoutMs(plugin) });
     return { project, slug, port, pid, container: null, branch, portUp };
   } finally {
     await releaseBuildLock(orch);
@@ -641,6 +649,6 @@ async function startDockerized(
     125: `docker could not create container ${container}. If the name is taken, remove it manually: docker rm -f ${container}`,
   });
   await writeFile(runFilePath(orch, project, slug), formatRunState({ container, port, branch, started: Math.floor(Date.now() / 1000), project, slug }));
-  const portUp = await waitPortUp(port, {});
+  const portUp = await waitPortUp(port, { deadlineMs: upTimeoutMs(plugin) });
   return { project, slug, port, pid: null, container, branch, portUp };
 }
