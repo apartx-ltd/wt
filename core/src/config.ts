@@ -1,6 +1,7 @@
 import { resolve, basename } from "node:path";
 import { existsSync } from "node:fs";
 import { registerSelfResolver } from "./self-resolve";
+import type { DockerStorage } from "./storage";
 
 /** Docker mode of a project: an `image` present ⇒ the project runs as a container. */
 export interface DockerConfig {
@@ -11,6 +12,14 @@ export interface DockerConfig {
    * For what the project needs outside the worktree (a git-ignored config, a data directory).
    */
   mounts?: string[];
+  /**
+   * Where the instance's own volumes (the plugin's `ownedVolumes`: deps, build artifacts) live:
+   * `"volume"` (default) — docker named volumes; `"dir"` — directories under `storageDir`,
+   * visible on the host and removed with the worktree.
+   */
+  storage?: DockerStorage;
+  /** Directory of the `"dir"` storage, relative to the workspace root unless absolute. Default `var/volumes`. */
+  storageDir?: string;
 }
 
 /** A named docker volume as a mount source: `cargo_git`, `meteor_base`. No `/` and no `.`: a dotted name (`config.toml:/opt/x`) is almost always a file path that lost its `./`. */
@@ -179,6 +188,14 @@ export function validateConfig(config: WorkspaceConfig, repoName = "app"): Resol
           `wt.config: project ${name}: docker.mounts entry ${JSON.stringify(entry)} must be "/abs/host:/container[:opts]", "./relative:/container[:opts]" or "volume:/container[:opts]"`,
         );
       }
+    }
+    const storage = pc.docker?.storage;
+    if (storage !== undefined && storage !== "volume" && storage !== "dir") {
+      throw new Error(`wt.config: project ${name}: docker.storage must be "volume" or "dir" (got ${JSON.stringify(storage)})`);
+    }
+    const storageDir = pc.docker?.storageDir;
+    if (storageDir !== undefined && (typeof storageDir !== "string" || !storageDir.trim())) {
+      throw new Error(`wt.config: project ${name}: docker.storageDir must be a non-empty path (got ${JSON.stringify(storageDir)})`);
     }
   }
   return resolved;

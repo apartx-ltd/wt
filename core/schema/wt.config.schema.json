@@ -46,7 +46,9 @@
       "additionalProperties": false,
       "properties": {
         "image": { "type": "string" },
-        "mounts": { "type": "array", "items": { "type": "string" }, "description": "Extra -v entries appended after the plugin's mounts: /abs/host:/container[:ro], ./relative-to-workspace:/container or volume:/container." }
+        "mounts": { "type": "array", "items": { "type": "string" }, "description": "Extra -v entries appended after the plugin's mounts: /abs/host:/container[:ro], ./relative-to-workspace:/container or volume:/container." },
+        "storage": { "type": "string", "enum": ["volume", "dir"], "description": "Where the instance's own volumes (deps, build artifacts) live: docker named volumes (default) or directories under storageDir." },
+        "storageDir": { "type": "string", "description": "Directory of the \"dir\" storage, relative to the workspace root unless absolute. Default var/volumes." }
       },
       "required": ["image"]
     },

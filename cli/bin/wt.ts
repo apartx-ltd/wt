@@ -30,6 +30,7 @@ import {
   collectSlimFacts,
   slimOne,
   removeVolumes,
+  removeVolumeDirs,
   type StopOutcome,
 } from "#core";
 import { registerBundledPlugins } from "#plugins";
@@ -353,7 +354,7 @@ async function cmdSlim() {
   const apply = rest.includes("--apply");
   const plan = await collectSlimFacts(orch);
   if (json) return void console.log(JSON.stringify(plan));
-  const { items, orphanVolumes } = plan;
+  const { items, orphanVolumes, orphanVolumeDirs } = plan;
 
   const toSlim = items.filter((i) => i.action === "slim").sort((a, b) => b.hostBytes - a.hostBytes);
   const running = items.filter((i) => i.reason === "running");
@@ -367,14 +368,20 @@ async function cmdSlim() {
     console.log(`— orphan volumes, the worktree is gone (${orphanVolumes.length}):`);
     for (const v of orphanVolumes) console.log("  " + v);
   }
+  if (orphanVolumeDirs.length) {
+    console.log(`— orphan volume directories, the worktree is gone (${orphanVolumeDirs.length}):`);
+    for (const d of orphanVolumeDirs) console.log("  " + d);
+  }
   const gb = toSlim.reduce((s, i) => s + i.hostBytes, 0);
   const vols = toSlim.reduce((s, i) => s + i.volumes.length, 0) + orphanVolumes.length;
   console.log(`total: ${toSlim.length} worktree(s), ~${fmtGb(gb)} on the host + ${vols} docker volume(s) (size not measured)`);
 
   if (!apply) {
-    if (toSlim.length || orphanVolumes.length) console.log("dry-run — to execute: wt slim --apply");
+    if (toSlim.length || orphanVolumes.length || orphanVolumeDirs.length) console.log("dry-run — to execute: wt slim --apply");
     return;
   }
+  await removeVolumeDirs(orphanVolumeDirs);
+  if (orphanVolumeDirs.length) console.log(`orphan volume directories removed: ${orphanVolumeDirs.length}`);
   const keptOrphans = await removeVolumes(orphanVolumes);
   console.log(`orphan volumes removed: ${orphanVolumes.length - keptOrphans.length}` +
     (keptOrphans.length ? ` (in use, kept: ${keptOrphans.join(", ")})` : ""));

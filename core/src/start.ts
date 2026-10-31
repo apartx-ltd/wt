@@ -20,7 +20,8 @@ import {
 } from "./paths";
 import { resolveBasePort, resolveAuxBasePort, readWorktreePort, readEnvValue } from "./ports";
 import { mergeEnvFiles } from "./env-merge";
-import { ensureDeps, ensureHostDeps } from "./deps";
+import { ensureDeps, ensureHostDeps, depsVolume } from "./deps";
+import { applyStorage, ensureVolumeDirs, storageSource } from "./storage";
 import {
   parseRunState,
   isInstanceAlive,
@@ -610,12 +611,17 @@ async function startDockerized(
     port, offset: 0, container, mode: "docker", settingsPath: null, extraPorts: {}, projectsDir,
   });
   const dockerSpec = plugin.docker?.(specCtx) ?? { mounts: [] };
-  // the plugin's volumes, then the project's own `docker.mounts` (files outside the worktree)
-  const mounts = withProjectMounts(dockerSpec.mounts, config.docker, orch);
+  // the plugin's volumes, then the project's own `docker.mounts` (files outside the worktree);
+  // in dir storage the instance's own volumes become directories under docker.storageDir.
+  const storage = config.docker?.storage ?? "volume";
+  const owned = dockerSpec.ownedVolumes ?? [];
+  await ensureVolumeDirs(orch, owned, storage, config.docker?.storageDir);
+  const mounts = applyStorage(withProjectMounts(dockerSpec.mounts, config.docker, orch), owned, storage, orch, config.docker?.storageDir);
+  const depsSource = storageSource(orch, depsVolume(container, plugin.deps), storage, config.docker?.storageDir);
 
   // Dependency install comes after dockerSpec: both the volume layout and the command itself come
   // from the plugin (meteor → `meteor npm install` + meteor volumes, node → `npm install` without them).
-  await ensureDeps(dir, container, config.docker!.image, mounts, plugin.install(specCtx).argv, plugin.deps);
+  await ensureDeps(dir, container, config.docker!.image, mounts, plugin.install(specCtx).argv, plugin.deps, depsSource);
 
   const envFile = await renderEnvFile(orch, project, slug, host, dockerSpec.envLineFilter, projectsDir);
   const settingsMount = await renderDockerSettings(orch, project, slug, host, projectsDir);

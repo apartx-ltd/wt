@@ -492,3 +492,36 @@ test("installMounts: the plugin's docker mounts, then the project's docker.mount
   expect(mounts[mounts.length - 1]).toBe("/o/local:/opt/local:ro");
   expect(installMounts(await loadPlugin("@apartx/wt/plugin-rust"), ctx, { ...config, docker: { image: "img:1" } }, "/o")).not.toContain("/o/local:/opt/local:ro");
 });
+
+test("removeWorktree in dir storage: removes <storageDir>/<owned volume> and still asks docker to remove the volume", async () => {
+  const orch = mkdtempSync(resolve(tmpdir(), "wt-rm-dir-"));
+  try {
+    const pdir = resolve(orch, "projects", "proj");
+    mkdirSync(pdir, { recursive: true });
+    writeFileSync(resolve(orch, "wt.config.ts"), `
+import { defineWorkspace } from ${JSON.stringify(resolve(import.meta.dir, "../src/config"))};
+export default defineWorkspace({
+  projects: { proj: { plugin: "@apartx/wt/plugin-node", docker: { image: "node:22", storage: "dir", storageDir: "./cache/volumes" } } },
+});
+`);
+    mkdirSync(resolve(orch, "var"), { recursive: true });
+    for (const a of [["init", "-q", "-b", "main"], ["config", "user.email", "t@t.t"], ["config", "user.name", "t"], ["commit", "-q", "--allow-empty", "-m", "init"]]) {
+      const proc = Bun.spawn(["git", "-C", pdir, ...a], { stdout: "ignore", stderr: "ignore" });
+      if ((await proc.exited) !== 0) throw new Error(`git ${a.join(" ")} failed`);
+    }
+    const wdir = resolve(orch, "worktrees", "proj", "x");
+    const add = Bun.spawn(["git", "-C", pdir, "worktree", "add", "-q", wdir, "-b", "feature/x"], { stdout: "ignore", stderr: "ignore" });
+    expect(await add.exited).toBe(0);
+    const vdir = resolve(orch, "cache", "volumes", "wtdev-proj-x-node_modules");
+    mkdirSync(vdir, { recursive: true });
+    writeFileSync(resolve(vdir, "stamp"), "x");
+
+    const asked: string[][] = [];
+    await removeWorktree(orch, "proj", "x", { removeVolumes: async (v) => { asked.push(v); } });
+    expect(existsSync(vdir)).toBe(false);
+    expect(existsSync(wdir)).toBe(false);
+    expect(asked).toEqual([["wtdev-proj-x-node_modules"]]);
+  } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
+});

@@ -15,6 +15,7 @@ import { resolveProjectConfig, resolveProjectsDir, UnlistedProjectError } from "
 import { loadPlugin, type InstanceCtx } from "./plugin";
 import { containerName } from "./containers";
 import { projectDir } from "./paths";
+import { DEFAULT_STORAGE_DIR, volumeDir } from "./storage";
 
 export interface SlimFacts {
   running: boolean;
@@ -63,8 +64,9 @@ async function duBytes(path: string): Promise<number> {
 /** Volumes that plugin.docker() declares as its own for (project, slug); not dockerized → []. */
 async function ownedVolumes(orch: string, project: string, slug: string, dir: string, branch: string): Promise<string[]> {
   const config = await resolveProjectConfig(orch, project);
+  if (!config.docker?.image) return [];
   const plugin = await loadPlugin(config.plugin);
-  if (!config.docker?.image || !plugin.docker) return [];
+  if (!plugin.docker) return [];
   // docker() only reads worktreeDir/container — the rest of ctx is there for the type.
   const ctx: InstanceCtx = {
     orch, project, slug, branch,
@@ -79,6 +81,8 @@ export interface SlimPlan {
   items: SlimItem[];
   /** volumes of worktrees deleted bypassing `wt rm` — removed entirely, nothing to restore. */
   orphanVolumes: string[];
+  /** dir-storage volume directories (under every configured `docker.storageDir` and `var/volumes`) with neither a worktree nor a base. */
+  orphanVolumeDirs: string[];
 }
 
 async function dockerVolumes(): Promise<string[]> {
@@ -113,6 +117,8 @@ export async function collectSlimFacts(
   // the volumes of all worktrees orphans (which is exactly what happened on 2026-10-20).
   const owned = new Set<string>();
   const unlisted = new Set<string>();
+  // every directory that may hold dir-storage volumes: the default plus each project's own
+  const storageDirs = new Set<string>([resolve(orch, DEFAULT_STORAGE_DIR)]);
   for (const p of await listProjects(orch)) {
     if (!(await isConfigured(orch, p))) {
       // An unlisted repo (a docs or library repo) has no plugin to ask which volumes are
@@ -122,6 +128,8 @@ export async function collectSlimFacts(
       for (const v of allVolumes) if (v.startsWith(containerName(p, ""))) owned.add(v);
       continue;
     }
+    const storageDir = (await resolveProjectConfig(orch, p)).docker?.storageDir;
+    if (storageDir) storageDirs.add(resolve(orch, storageDir));
     for (const v of await ownedVolumes(orch, p, BASE_SLUG, projectDir(orch, p, projectsDir), "")) owned.add(v);
     const onDisk = await readdir(resolve(orch, "worktrees", p)).catch(() => [] as string[]);
     for (const slug of onDisk)
@@ -131,7 +139,8 @@ export async function collectSlimFacts(
   const items: SlimItem[] = [];
   for (const w of wts) {
     if (unlisted.has(w.project)) continue; // no plugin → its artifacts are unknown; volumes kept above
-    const plugin = await loadPlugin((await resolveProjectConfig(orch, w.project)).plugin);
+    const config = await resolveProjectConfig(orch, w.project);
+    const plugin = await loadPlugin(config.plugin);
     const dirs: SlimFacts["dirs"] = [];
     for (const d of plugin.artifactDirs ?? []) {
       const path = resolve(w.path, d);
@@ -139,6 +148,13 @@ export async function collectSlimFacts(
     }
     const declared = await ownedVolumes(orch, w.project, w.slug, w.path, w.branch);
     for (const v of declared) owned.add(v);
+    // dir storage: the owned volumes are directories on the host — sized and removed like artifact dirs
+    if (config.docker?.storage === "dir") {
+      for (const v of declared) {
+        const path = volumeDir(orch, v, config.docker.storageDir);
+        if (existsSync(path)) dirs.push({ path, bytes: await duBytes(path) });
+      }
+    }
     const facts: SlimFacts = {
       running: running.has(`${w.project}/${w.slug}`),
       dirs,
@@ -150,7 +166,17 @@ export async function collectSlimFacts(
       hostBytes: dirs.reduce((s, d) => s + d.bytes, 0),
     });
   }
-  return { items, orphanVolumes: findOrphanVolumes(allVolumes, owned) };
+  const orphanVolumeDirs: string[] = [];
+  for (const sd of storageDirs) {
+    const names = await readdir(sd).catch(() => [] as string[]);
+    for (const v of findOrphanVolumes(names, owned)) orphanVolumeDirs.push(resolve(sd, v));
+  }
+  return { items, orphanVolumes: findOrphanVolumes(allVolumes, owned), orphanVolumeDirs };
+}
+
+/** `rm -rf` of orphan dir-storage volume directories. */
+export async function removeVolumeDirs(dirs: string[]): Promise<void> {
+  for (const d of dirs) await rm(d, { recursive: true, force: true });
 }
 
 /** `docker volume rm` one by one; returns the ones docker refused to remove (held by a container). */

@@ -7,7 +7,8 @@ import { containerName } from "./containers";
 import { loadPlugin, type EnvCtx, type InstanceCtx, type StackPlugin } from "./plugin";
 import { loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, resolvePortStep, withProjectMounts, type ResolvedProjectConfig } from "./config";
 import { stopInstance } from "./run";
-import { installDockerDeps, installHostDeps } from "./deps";
+import { installDockerDeps, installHostDeps, depsVolume } from "./deps";
+import { applyStorage, ensureVolumeDirs, storageSource, volumeDir } from "./storage";
 import {
   projectDir,
   worktreeDir,
@@ -265,7 +266,10 @@ export async function createWorktree(
   };
   const installArgv = plugin.install(installCtx).argv;
   if (config.docker?.image) {
-    await installDockerDeps(dir, cn, config.docker!.image, installMounts(plugin, installCtx, config, orch), installArgv, plugin.deps);
+    const storage = config.docker.storage ?? "volume";
+    await ensureVolumeDirs(orch, plugin.docker?.(installCtx).ownedVolumes ?? [], storage, config.docker.storageDir);
+    const depsSource = storageSource(orch, depsVolume(cn, plugin.deps), storage, config.docker.storageDir);
+    await installDockerDeps(dir, cn, config.docker.image, installMounts(plugin, installCtx, config, orch), installArgv, plugin.deps, depsSource);
   } else {
     await installHostDeps(dir, installArgv, plugin.deps);
   }
@@ -290,9 +294,14 @@ export async function createWorktree(
   return { dir, branch, port: computed.port, offset: computed.offset };
 }
 
-/** Mounts of the install container: the plugin's `docker()` mounts, then the project's `docker.mounts`. */
+/**
+ * Mounts of the install container: the plugin's `docker()` mounts, then the project's
+ * `docker.mounts`; in dir storage the plugin's owned volumes are rewritten to their directories.
+ */
 export function installMounts(plugin: StackPlugin, ctx: InstanceCtx, config: ResolvedProjectConfig, orch: string): string[] {
-  return withProjectMounts(plugin.docker?.(ctx).mounts ?? [], config.docker, orch);
+  const spec = plugin.docker?.(ctx);
+  const mounts = withProjectMounts(spec?.mounts ?? [], config.docker, orch);
+  return applyStorage(mounts, spec?.ownedVolumes ?? [], config.docker?.storage ?? "volume", orch, config.docker?.storageDir);
 }
 
 /**
@@ -308,6 +317,8 @@ export function instanceVolumes(plugin: StackPlugin | null, ctx: InstanceCtx): s
 export interface RemoveWorktreeOpts {
   /** also delete the feature/<slug> branch (git branch -d). */
   dropBranch?: boolean;
+  /** test seam; default: `docker volume rm` (failures ignored — a volume that never existed is fine). */
+  removeVolumes?: (volumes: string[]) => Promise<void>;
 }
 
 /**
@@ -340,7 +351,13 @@ export async function removeWorktree(
       orch, project, slug, branch: "", projectDir: pdir, worktreeDir: dir, config,
       port: 0, offset: 0, container: cn, mode: "docker", settingsPath: null, extraPorts: {},
     });
-    if (volumes.length) await shOk(["docker", "volume", "rm", ...volumes]);
+    const removeVolumes = opts.removeVolumes ?? (async (v: string[]) => { await shOk(["docker", "volume", "rm", ...v]); });
+    if (volumes.length) await removeVolumes(volumes);
+    // dir storage: the volumes are directories under docker.storageDir — remove them too.
+    // (A volume-mode leftover is covered by `docker volume rm` above, a dir-mode one by this.)
+    if (config.docker.storage === "dir") {
+      for (const v of volumes) await rm(volumeDir(orch, v, config.docker.storageDir), { recursive: true, force: true });
+    }
     await unlink(mergedEnvPath(orch, project, slug)).catch(() => {});
     await unlink(dockerSettingsPath(orch, project, slug)).catch(() => {});
   }

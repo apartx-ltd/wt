@@ -317,3 +317,22 @@ test("withProjectMounts appends the project's mounts after the plugin's, resolvi
   expect(withProjectMounts(["/wt:/opt/app"], { image: "img:1" }, "/w")).toEqual(["/wt:/opt/app"]);
   expect(withProjectMounts(["/wt:/opt/app"], undefined, "/w")).toEqual(["/wt:/opt/app"]);
 });
+
+test("docker.storage and docker.storageDir: accepted values, inherited from defaults, invalid ones rejected", () => {
+  const ok = (docker: any) => validateConfig({
+    projectsDir: "projects",
+    projects: { api: { plugin: "@apartx/wt/plugin-rust", docker } },
+  });
+  expect(ok({ image: "i", storage: "dir" }).projects.api?.docker?.storage).toBe("dir");
+  expect(ok({ image: "i", storage: "dir", storageDir: "/fast/wt-volumes" }).projects.api?.docker?.storageDir).toBe("/fast/wt-volumes");
+  expect(ok({ image: "i", storage: "volume", storageDir: "./cache/volumes" }).projects.api?.docker?.storageDir).toBe("./cache/volumes");
+  expect(() => ok({ image: "i", storage: "tmpfs" })).toThrow(/wt\.config: project api: docker\.storage/);
+  expect(() => ok({ image: "i", storage: "dir", storageDir: "" })).toThrow(/wt\.config: project api: docker\.storageDir/);
+  const cfg = resolveConfig({
+    projectsDir: "projects",
+    defaults: { plugin: "@apartx/wt/plugin-node", docker: { image: "i", storage: "dir", storageDir: "./cache/volumes" } },
+    projects: { api: {}, web: { docker: { image: "w", storage: "volume" } } },
+  });
+  expect(cfg.projects.api?.docker).toEqual({ image: "i", storage: "dir", storageDir: "./cache/volumes" });
+  expect(cfg.projects.web?.docker).toEqual({ image: "w", storage: "volume", storageDir: "./cache/volumes" });
+});
