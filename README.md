@@ -119,7 +119,7 @@ checkout `projects/<p>` (slug `base`). In a single-repo workspace `<p>` is impli
 | `wt rm <p> <slug> [--branch]` | remove a worktree (+ optionally its branch) |
 | `wt reap` | remove all `wtdev-*` dev containers |
 | `wt sweep [--apply] [--json]` | remove worktrees whose branches are merged (GitLab merge requests via `glab`; without `--apply` = plan) |
-| `wt slim [--apply] [--json]` | remove restorable artifacts (dependencies, build caches, docker volumes) in all stopped worktrees + orphan volumes (without `--apply` = plan) |
+| `wt slim [--apply] [--json]` | remove restorable artifacts (dependencies, build caches, docker volumes or their `docker.storage: "dir"` directories) in all stopped worktrees + orphan volumes and volume directories (without `--apply` = plan) |
 | `wt port <p> [slug] [--json]` | print the allocated port |
 | `wt projects [--json]` | list projects |
 | `wt ui` | full-screen TUI dashboard |

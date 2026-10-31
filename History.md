@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `docker.mounts` in `wt.config.ts`: extra `-v` entries for a dockerized project, appended after
+  the plugin's mounts, in compose syntax (`/abs/host:/container[:ro]`, `./relative-to-workspace:/container`,
+  `volume:/container`) — for what the worktree does not carry, such as a git-ignored config.
+  Validated on load; applied by `wt new` (install) and `wt start`.
+- `docker.storage: "dir"` (+ `docker.storageDir`, default `var/volumes`): the instance's own
+  volumes (the plugin's `ownedVolumes`) become host directories `<storageDir>/<volume name>`
+  instead of docker named volumes. `wt rm` removes them with the worktree, `wt slim` sizes them
+  with the worktree's artifacts and lists directories without a worktree as orphans
+  (`orphanVolumeDirs` in `--json`). Default `"volume"` is unchanged.
 - Plugin contract: optional `upTimeoutMs` lets a plugin say how long `wt start` waits for the
   instance port before reporting `did NOT come up in time`. Without it the core keeps its
   10-minute wait; the Rust plugin declares 30 minutes so a cold `cargo run` build in a fresh
