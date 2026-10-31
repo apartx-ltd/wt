@@ -67,3 +67,11 @@ test("rust plugin docker: repo + target volume per worktree, shared cargo regist
   expect(spec.ownedVolumes).toEqual(["wtdev-api-slug-target"]);
   expect(spec.addHosts).toEqual(["host.docker.internal:host-gateway"]);
 });
+
+test("rust plugin: a startup budget of 30 minutes covers a cold cargo build; node and meteor keep the core default", async () => {
+  expect(rustPlugin.upTimeoutMs).toBe(30 * 60_000);
+  const { nodePlugin } = await import("#plugin-node");
+  const { meteorPlugin } = await import("#plugin-meteor");
+  expect(nodePlugin.upTimeoutMs).toBeUndefined();
+  expect(meteorPlugin.upTimeoutMs).toBeUndefined();
+});

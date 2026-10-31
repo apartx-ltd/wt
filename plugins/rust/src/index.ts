@@ -48,6 +48,9 @@ export const rustPlugin: StackPlugin = {
   deps: { dir: "target", files: ["Cargo.toml", "Cargo.lock"] },
   artifactDirs: ["target"],
   devCommand: (ctx) => ({ argv: ["cargo", hasDevAlias(ctx.worktreeDir) ? "dev" : "run"] }),
+  // The first `cargo run` in a fresh worktree compiles the whole dependency graph from a cold
+  // `target/`: minutes, not seconds. Keep `wt start` waiting through it.
+  upTimeoutMs: 30 * 60_000,
   docker: (ctx) => ({
     mounts: [
       `${ctx.worktreeDir}:/opt/app`,

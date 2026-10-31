@@ -103,6 +103,12 @@ export interface StackPlugin {
   /** worktree directories (relative to its root) that install/build restores — `wt slim` removes them. */
   artifactDirs?: string[];
   devCommand(ctx: InstanceCtx): Command;
+  /**
+   * How long `wt start` waits for the instance port after spawning devCommand before it
+   * reports "did NOT come up in time" (the process keeps running either way). Default: the
+   * core's 10 minutes; a stack whose first start compiles the project (cargo) declares more.
+   */
+  upTimeoutMs?: number;
   envLines?(ctx: EnvCtx): string[];
   /** static lines appended to `.env.worktree` (after ROOT_URL); empty ⇒ nothing. */
   worktreeEnvTail?(ctx: WorktreeCtx): string[];
