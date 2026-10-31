@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { spawn as cpSpawn } from "node:child_process";
 import { containerName, dockerRemove } from "./containers";
 import { BASE_SLUG, regenerateWorktreeEnvPreserving } from "./new-worktree";
-import { resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, type ResolvedProjectConfig } from "./config";
+import { resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, type ResolvedProjectConfig, withProjectMounts } from "./config";
 import { loadPlugin, type InstanceCtx, type StackPlugin } from "./plugin";
 import { applyLinks } from "./links";
 import {
@@ -20,7 +20,8 @@ import {
 } from "./paths";
 import { resolveBasePort, resolveAuxBasePort, readWorktreePort, readEnvValue } from "./ports";
 import { mergeEnvFiles } from "./env-merge";
-import { ensureDeps, ensureHostDeps } from "./deps";
+import { ensureDeps, ensureHostDeps, depsVolume } from "./deps";
+import { applyStorage, ensureVolumeDirs, storageSource } from "./storage";
 import {
   parseRunState,
   isInstanceAlive,
@@ -96,13 +97,15 @@ export function baseCheckoutDockerEnv(
 }
 
 /**
- * Remap one env line for the container: `localhost`/`127.0.0.1`→host (EXCEPT ROOT_URL).
+ * Remap one env line for the container: `localhost`/`127.0.0.1`→host (EXCEPT ROOT_URL and the
+ * project's `docker.keepLocalhost` keys — browser-facing origins).
  * Stack-specific tweaks (e.g. mongo directConnection) come from plugin.docker().envLineFilter,
  * which the core applies AFTER the generic remap. Parity with the sed+awk in render_env_file.
  */
-export function remapEnvLine(line: string, host: string, filter?: (l: string) => string): string {
+export function remapEnvLine(line: string, host: string, filter?: (l: string) => string, keepLocalhost: string[] = []): string {
   let l = line;
-  if (!l.startsWith("ROOT_URL=")) l = l.replaceAll("localhost", host).replaceAll("127.0.0.1", host);
+  const key = l.slice(0, l.indexOf("="));
+  if (key !== "ROOT_URL" && !keepLocalhost.includes(key)) l = l.replaceAll("localhost", host).replaceAll("127.0.0.1", host);
   return filter ? filter(l) : l;
 }
 
@@ -285,6 +288,7 @@ export async function renderEnvFile(
   host: string,
   envLineFilter?: (l: string) => string,
   projectsDir = "projects",
+  keepLocalhost: string[] = [],
 ): Promise<string> {
   const pdir = projectDir(orch, project, projectsDir);
   const dir = slug === BASE_SLUG ? pdir : worktreeDir(orch, project, slug);
@@ -348,7 +352,7 @@ export async function renderEnvFile(
     if (values.has(k)) continue;
     values.set(k, v);
   }
-  const remapped = [...values.entries()].map(([k, v]) => remapEnvLine(`${k}=${v}`, host, envLineFilter));
+  const remapped = [...values.entries()].map(([k, v]) => remapEnvLine(`${k}=${v}`, host, envLineFilter, keepLocalhost));
   const content = remapped.length ? remapped.join("\n") + "\n" : "";
   await mkdir(dirname(out), { recursive: true });
   await writeFile(out, content);
@@ -610,12 +614,19 @@ async function startDockerized(
     port, offset: 0, container, mode: "docker", settingsPath: null, extraPorts: {}, projectsDir,
   });
   const dockerSpec = plugin.docker?.(specCtx) ?? { mounts: [] };
+  // the plugin's volumes, then the project's own `docker.mounts` (files outside the worktree);
+  // in dir storage the instance's own volumes become directories under docker.storageDir.
+  const storage = config.docker?.storage ?? "volume";
+  const owned = dockerSpec.ownedVolumes ?? [];
+  await ensureVolumeDirs(orch, owned, storage, config.docker?.storageDir);
+  const mounts = applyStorage(withProjectMounts(dockerSpec.mounts, config.docker, orch), owned, storage, orch, config.docker?.storageDir);
+  const depsSource = storageSource(orch, depsVolume(container, plugin.deps), storage, config.docker?.storageDir);
 
   // Dependency install comes after dockerSpec: both the volume layout and the command itself come
   // from the plugin (meteor → `meteor npm install` + meteor volumes, node → `npm install` without them).
-  await ensureDeps(dir, container, config.docker!.image, dockerSpec.mounts, plugin.install(specCtx).argv, plugin.deps);
+  await ensureDeps(dir, container, config.docker!.image, mounts, plugin.install(specCtx).argv, plugin.deps, depsSource);
 
-  const envFile = await renderEnvFile(orch, project, slug, host, dockerSpec.envLineFilter, projectsDir);
+  const envFile = await renderEnvFile(orch, project, slug, host, dockerSpec.envLineFilter, projectsDir, config.docker?.keepLocalhost);
   const settingsMount = await renderDockerSettings(orch, project, slug, host, projectsDir);
 
   // Aux ports (generic): for each spec take the env override from the merged env, otherwise the
@@ -642,7 +653,7 @@ async function startDockerized(
   const dockerEnv = baseCheckoutDockerEnv(slug, dockerSpec.env, plugin.envLines?.(ctx) ?? []);
   const args = buildDockerRunArgs({
     container, port, envFile, extraPorts,
-    mounts: dockerSpec.mounts, addHosts, innerCmd, image: config.docker!.image, settingsMount,
+    mounts, addHosts, innerCmd, image: config.docker!.image, settingsMount,
     dockerEnv,
   });
   await shInherit(["docker", ...args], {

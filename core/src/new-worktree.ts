@@ -5,9 +5,10 @@ import { resolveBasePort, resolveAuxBasePort, readLedger, allocateOffset, append
 import { generateEnvWorktree, branchDbSuffix } from "./env-worktree";
 import { containerName } from "./containers";
 import { loadPlugin, type EnvCtx, type InstanceCtx, type StackPlugin } from "./plugin";
-import { loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, resolvePortStep } from "./config";
+import { loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveProjectsDir, resolvePortStep, withProjectMounts, type ResolvedProjectConfig } from "./config";
 import { stopInstance } from "./run";
-import { installDockerDeps, installHostDeps } from "./deps";
+import { installDockerDeps, installHostDeps, depsVolume } from "./deps";
+import { applyStorage, ensureVolumeDirs, storageSource, volumeDir } from "./storage";
 import {
   projectDir,
   worktreeDir,
@@ -200,6 +201,12 @@ export async function regenerateWorktreeEnvPreserving(
 export interface CreateWorktreeOpts {
   isolatedDb?: boolean;
   seed?: boolean;
+  /** test seam; default: `docker image inspect <image>`. */
+  imageExists?: (image: string) => Promise<boolean>;
+}
+
+async function dockerImageExists(image: string): Promise<boolean> {
+  return shOk(["docker", "image", "inspect", image]);
 }
 export interface CreateWorktreeResult {
   dir: string;
@@ -232,6 +239,11 @@ export async function createWorktree(
   // leave a half-made worktree and branch behind.
   const config = await resolveProjectConfig(orch, project);
   const plugin = await loadPlugin(config.plugin);
+  // The same for a dev image that is not built yet: the install would fail inside docker
+  // after the worktree and branch exist, and the rerun would hit "worktree already exists".
+  if (config.docker?.image && !(await (opts.imageExists ?? dockerImageExists)(config.docker.image))) {
+    throw new Error(`image ${config.docker.image} not found locally — build it first (docker.image of project ${project} in wt.config.ts)`);
+  }
 
   // Branch name and fork point come from config.branches (M2.5). The prefix governs slug↔branch,
   // base is the starting point of the new branch (apartx: "develop"), not the current HEAD of the base
@@ -265,7 +277,10 @@ export async function createWorktree(
   };
   const installArgv = plugin.install(installCtx).argv;
   if (config.docker?.image) {
-    await installDockerDeps(dir, cn, config.docker!.image, plugin.docker!(installCtx).mounts, installArgv, plugin.deps);
+    const storage = config.docker.storage ?? "volume";
+    await ensureVolumeDirs(orch, plugin.docker?.(installCtx).ownedVolumes ?? [], storage, config.docker.storageDir);
+    const depsSource = storageSource(orch, depsVolume(cn, plugin.deps), storage, config.docker.storageDir);
+    await installDockerDeps(dir, cn, config.docker.image, installMounts(plugin, installCtx, config, orch), installArgv, plugin.deps, depsSource);
   } else {
     await installHostDeps(dir, installArgv, plugin.deps);
   }
@@ -291,6 +306,16 @@ export async function createWorktree(
 }
 
 /**
+ * Mounts of the install container: the plugin's `docker()` mounts, then the project's
+ * `docker.mounts`; in dir storage the plugin's owned volumes are rewritten to their directories.
+ */
+export function installMounts(plugin: StackPlugin, ctx: InstanceCtx, config: ResolvedProjectConfig, orch: string): string[] {
+  const spec = plugin.docker?.(ctx);
+  const mounts = withProjectMounts(spec?.mounts ?? [], config.docker, orch);
+  return applyStorage(mounts, spec?.ownedVolumes ?? [], config.docker?.storage ?? "volume", orch, config.docker?.storageDir);
+}
+
+/**
  * Per-worktree docker volumes of an instance, as the plugin's `docker()` declares them
  * (`ownedVolumes`). A plugin without `docker()` gets the legacy meteor pair — the names
  * `wt rm` removed before plugins described their own layout.
@@ -303,6 +328,10 @@ export function instanceVolumes(plugin: StackPlugin | null, ctx: InstanceCtx): s
 export interface RemoveWorktreeOpts {
   /** also delete the feature/<slug> branch (git branch -d). */
   dropBranch?: boolean;
+  /** test seam; default: `docker volume rm` (failures ignored — a volume that never existed is fine). */
+  removeVolumes?: (volumes: string[]) => Promise<void>;
+  /** where a non-fatal problem is reported; default: stderr. */
+  warn?: (message: string) => void;
 }
 
 /**
@@ -335,7 +364,19 @@ export async function removeWorktree(
       orch, project, slug, branch: "", projectDir: pdir, worktreeDir: dir, config,
       port: 0, offset: 0, container: cn, mode: "docker", settingsPath: null, extraPorts: {},
     });
-    if (volumes.length) await shOk(["docker", "volume", "rm", ...volumes]);
+    const removeVolumes = opts.removeVolumes ?? (async (v: string[]) => { await shOk(["docker", "volume", "rm", ...v]); });
+    if (volumes.length) await removeVolumes(volumes);
+    // dir storage: the volumes are directories under docker.storageDir — remove them too.
+    // (A volume-mode leftover is covered by `docker volume rm` above, a dir-mode one by this.)
+    // A directory the user cannot delete (contents written as root by a Linux docker daemon) is
+    // reported and left behind: the worktree still goes, as it does when `docker volume rm` fails.
+    if (config.docker.storage === "dir") {
+      const warn = opts.warn ?? ((m: string) => console.error(`wt: ${m}`));
+      for (const v of volumes) {
+        const d = volumeDir(orch, v, config.docker.storageDir);
+        await rm(d, { recursive: true, force: true }).catch((e: Error) => warn(`could not remove ${d} (${e.message}) — remove it manually, e.g. sudo rm -rf ${d}`));
+      }
+    }
     await unlink(mergedEnvPath(orch, project, slug)).catch(() => {});
     await unlink(dockerSettingsPath(orch, project, slug)).catch(() => {});
   }

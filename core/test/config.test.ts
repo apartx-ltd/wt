@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { writeFileSync } from "node:fs";
-import { defineWorkspace, resolveConfig, validateConfig, loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveCoreStack, resolveLinkSpecs, resolveProjectsDir, resolveServerProject } from "../src/config";
+import { defineWorkspace, resolveConfig, validateConfig, loadConfig, resolveProjectConfig, resolveDockerizedProjects, resolveCoreStack, resolveLinkSpecs, resolveProjectsDir, resolveServerProject, withProjectMounts } from "../src/config";
 
 // A multi-repo workspace written by the test: a dockerized core project (srv), a host-mode
 // core project inheriting the plugin from defaults (web) and a node-plugin project (worker).
@@ -275,4 +275,82 @@ test("resolveServerProject reads serverProject from wt.config.ts; null when unse
   } finally {
     rmSync(empty, { recursive: true, force: true });
   }
+});
+
+test("resolveConfig keeps docker.mounts of a project", () => {
+  const cfg = resolveConfig({
+    projectsDir: "projects",
+    defaults: { plugin: "@apartx/wt/plugin-rust" },
+    projects: { api: { docker: { image: "img:1", mounts: ["/w/local:/w/local:ro"] } } },
+  });
+  expect(cfg.projects?.api?.docker?.mounts).toEqual(["/w/local:/w/local:ro"]);
+});
+
+test("resolveConfig: a project's docker.mounts replaces the defaults' array, no merge", () => {
+  const cfg = resolveConfig({
+    projectsDir: "projects",
+    defaults: { plugin: "@apartx/wt/plugin-rust", docker: { image: "img:1", mounts: ["/a:/a"] } },
+    projects: { api: { docker: { image: "img:1", mounts: ["/b:/b"] } }, web: {} },
+  });
+  expect(cfg.projects?.api?.docker?.mounts).toEqual(["/b:/b"]);
+  expect(cfg.projects?.web?.docker?.mounts).toEqual(["/a:/a"]);
+});
+
+test("validateConfig rejects docker.mounts entries that are not host:container with an absolute or ./ host path or a named volume", () => {
+  for (const bad of ["config.toml:/opt/x", "/only-host", ""]) {
+    expect(() => validateConfig({
+      projectsDir: "projects",
+      projects: { api: { plugin: "@apartx/wt/plugin-rust", docker: { image: "img:1", mounts: [bad] } } },
+    })).toThrow(/wt\.config: project api: docker\.mounts/);
+  }
+  for (const good of ["cargo_git:/usr/local/cargo/git", "./local:/opt/local", "../shared:/opt/shared:ro"]) {
+    expect(() => validateConfig({
+      projectsDir: "projects",
+      projects: { api: { plugin: "@apartx/wt/plugin-rust", docker: { image: "img:1", mounts: [good] } } },
+    })).not.toThrow();
+  }
+});
+
+test("withProjectMounts appends the project's mounts after the plugin's, resolving ./ against the workspace", () => {
+  expect(withProjectMounts(["/wt:/opt/app"], { image: "img:1", mounts: ["/w/local:/w/local:ro", "./local:/opt/local:ro", "cargo_git:/usr/local/cargo/git"] }, "/w"))
+    .toEqual(["/wt:/opt/app", "/w/local:/w/local:ro", "/w/local:/opt/local:ro", "cargo_git:/usr/local/cargo/git"]);
+  expect(withProjectMounts(["/wt:/opt/app"], { image: "img:1" }, "/w")).toEqual(["/wt:/opt/app"]);
+  expect(withProjectMounts(["/wt:/opt/app"], undefined, "/w")).toEqual(["/wt:/opt/app"]);
+});
+
+test("docker.storage and docker.storageDir: accepted values, inherited from defaults, invalid ones rejected", () => {
+  const ok = (docker: any) => validateConfig({
+    projectsDir: "projects",
+    projects: { api: { plugin: "@apartx/wt/plugin-rust", docker } },
+  });
+  expect(ok({ image: "i", storage: "dir" }).projects.api?.docker?.storage).toBe("dir");
+  expect(ok({ image: "i", storage: "dir", storageDir: "/fast/wt-volumes" }).projects.api?.docker?.storageDir).toBe("/fast/wt-volumes");
+  expect(ok({ image: "i", storage: "volume", storageDir: "./cache/volumes" }).projects.api?.docker?.storageDir).toBe("./cache/volumes");
+  expect(() => ok({ image: "i", storage: "tmpfs" })).toThrow(/wt\.config: project api: docker\.storage/);
+  expect(() => ok({ image: "i", storage: "dir", storageDir: "" })).toThrow(/wt\.config: project api: docker\.storageDir/);
+  const cfg = resolveConfig({
+    projectsDir: "projects",
+    defaults: { plugin: "@apartx/wt/plugin-node", docker: { image: "i", storage: "dir", storageDir: "./cache/volumes" } },
+    projects: { api: {}, web: { docker: { image: "w", storage: "volume" } } },
+  });
+  expect(cfg.projects.api?.docker).toEqual({ image: "i", storage: "dir", storageDir: "./cache/volumes" });
+  expect(cfg.projects.web?.docker).toEqual({ image: "w", storage: "volume", storageDir: "./cache/volumes" });
+});
+
+test("docker.keepLocalhost: a list of env keys, inherited from defaults, invalid entries rejected", () => {
+  const ok = (docker: any) => validateConfig({
+    projectsDir: "projects",
+    projects: { web: { plugin: "@apartx/wt/plugin-node", docker } },
+  });
+  expect(ok({ image: "i", keepLocalhost: ["ORIGIN", "PUBLIC_URL"] }).projects.web?.docker?.keepLocalhost).toEqual(["ORIGIN", "PUBLIC_URL"]);
+  expect(() => ok({ image: "i", keepLocalhost: "ORIGIN" })).toThrow(/wt\.config: project web: docker\.keepLocalhost/);
+  expect(() => ok({ image: "i", keepLocalhost: ["ORIGIN", ""] })).toThrow(/wt\.config: project web: docker\.keepLocalhost/);
+  expect(() => ok({ image: "i", keepLocalhost: ["ORIGIN=http://x"] })).toThrow(/wt\.config: project web: docker\.keepLocalhost/);
+  const cfg = resolveConfig({
+    projectsDir: "projects",
+    defaults: { plugin: "@apartx/wt/plugin-node", docker: { image: "i", keepLocalhost: ["ORIGIN"] } },
+    projects: { web: {}, api: { docker: { image: "a", keepLocalhost: [] } } },
+  });
+  expect(cfg.projects.web?.docker?.keepLocalhost).toEqual(["ORIGIN"]);
+  expect(cfg.projects.api?.docker?.keepLocalhost).toEqual([]);
 });

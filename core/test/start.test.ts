@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { baseCheckoutDockerEnv, buildDockerRunArgs, devHost, buildHostDevArgs, buildHostMeteorArgs, remapEnvLine, remapSettingsHosts, renderEnvFile, shInherit, spawnDetached, type StartOptions } from "../src/start";
 import { BASE_SLUG } from "../src/new-worktree";
 import type { StackPlugin } from "../src/plugin";
-import type { ResolvedProjectConfig } from "../src/config";
+import { withProjectMounts, type ResolvedProjectConfig } from "../src/config";
 import { readFile } from "node:fs/promises";
 
 // Mounts/addHosts/innerCmd/image now come from the plugin (meteor) — the core only assembles
@@ -49,6 +49,14 @@ test("buildDockerRunArgs: core shape (no dev-host, no settings)", () => {
     "meteor-dev:3.4",
     "sh", "-c", "meteor run --port 4010",
   ]);
+});
+
+test("buildDockerRunArgs: project mounts follow the plugin's mounts, before -w", () => {
+  const args = buildDockerRunArgs({ ...base, mounts: withProjectMounts(base.mounts, { image: base.image, mounts: ["/w/local:/w/local:ro"] }, "/orch") });
+  const i = args.indexOf("/w/local:/w/local:ro");
+  expect(args[i - 1]).toBe("-v");
+  expect(args.indexOf("meteor_base:/root")).toBeLessThan(i);
+  expect(args.indexOf("-w")).toBeGreaterThan(i);
 });
 
 test("buildDockerRunArgs: with dev-host adds second --add-host", () => {
@@ -166,6 +174,15 @@ test("remapEnvLine: localhost→host except ROOT_URL", () => {
   expect(remapEnvLine("NATS_SERVERS=nats://localhost:4222", "dev.local")).toBe("NATS_SERVERS=nats://dev.local:4222");
   expect(remapEnvLine("ROOT_URL=http://localhost:3701", "dev.local")).toBe("ROOT_URL=http://localhost:3701");
   expect(remapEnvLine("X=http://127.0.0.1:9", "dev.local")).toBe("X=http://dev.local:9");
+});
+
+test("remapEnvLine leaves the keys in keepLocalhost alone (browser-facing origins), the rest is remapped", () => {
+  const keep = ["ORIGIN", "PUBLIC_URL"];
+  expect(remapEnvLine("ORIGIN=http://localhost:5213", "dev.local", undefined, keep)).toBe("ORIGIN=http://localhost:5213");
+  expect(remapEnvLine("PUBLIC_URL=http://127.0.0.1:5213/x", "dev.local", undefined, keep)).toBe("PUBLIC_URL=http://127.0.0.1:5213/x");
+  expect(remapEnvLine("API_URL=http://127.0.0.1:8110", "dev.local", undefined, keep)).toBe("API_URL=http://dev.local:8110");
+  expect(remapEnvLine("ORIGIN_X=http://localhost:1", "dev.local", undefined, keep)).toBe("ORIGIN_X=http://dev.local:1");
+  expect(remapEnvLine("ROOT_URL=http://localhost:3701", "dev.local", undefined, keep)).toBe("ROOT_URL=http://localhost:3701");
 });
 
 it("remapEnvLine no longer injects mongo directConnection on its own", () => {

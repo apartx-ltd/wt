@@ -1,10 +1,57 @@
 import { resolve, basename } from "node:path";
 import { existsSync } from "node:fs";
 import { registerSelfResolver } from "./self-resolve";
+import type { DockerStorage } from "./storage";
 
 /** Docker mode of a project: an `image` present ⇒ the project runs as a container. */
 export interface DockerConfig {
   image: string;
+  /**
+   * Extra `-v` entries appended after the plugin's mounts, in compose syntax:
+   * `/abs/host:/container[:ro]`, `./relative-to-workspace:/container`, `volume:/container`.
+   * For what the project needs outside the worktree (a git-ignored config, a data directory).
+   */
+  mounts?: string[];
+  /**
+   * Where the instance's own volumes (the plugin's `ownedVolumes`: deps, build artifacts) live:
+   * `"volume"` (default) — docker named volumes; `"dir"` — directories under `storageDir`,
+   * visible on the host and removed with the worktree.
+   */
+  storage?: DockerStorage;
+  /** Directory of the `"dir"` storage, relative to the workspace root unless absolute. Default `var/volumes`. */
+  storageDir?: string;
+  /**
+   * Env keys whose `localhost`/`127.0.0.1` is the browser's, not the container's (a public
+   * origin, a link base): left as is by the container remap, which rewrites every other value
+   * to the host. `ROOT_URL` is always left alone.
+   */
+  keepLocalhost?: string[];
+}
+
+/** A named docker volume as a mount source: `cargo_git`, `meteor_base`. No `/` and no `.`: a dotted name (`config.toml:/opt/x`) is almost always a file path that lost its `./`. */
+const VOLUME_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/** `docker.mounts` entry shape: `<src>:<dst>[:<opts>]` with `<src>` absolute, `./`/`../` or a volume name, `<dst>` absolute. */
+export function isMountEntry(entry: string): boolean {
+  const i = entry.indexOf(":");
+  if (i <= 0) return false;
+  const src = entry.slice(0, i);
+  const dst = entry.slice(i + 1).split(":")[0] ?? "";
+  const srcOk = src.startsWith("/") || src.startsWith("./") || src.startsWith("../") || VOLUME_NAME.test(src);
+  return srcOk && dst.startsWith("/");
+}
+
+/**
+ * The plugin's mounts followed by the project's `docker.mounts`, with `./`/`../` host paths
+ * resolved against the workspace. Order kept, duplicates not removed.
+ */
+export function withProjectMounts(pluginMounts: string[], docker: DockerConfig | undefined, orch: string): string[] {
+  const own = (docker?.mounts ?? []).map((m) => {
+    if (!m.startsWith("./") && !m.startsWith("../")) return m;
+    const i = m.indexOf(":");
+    return resolve(orch, m.slice(0, i)) + m.slice(i);
+  });
+  return [...pluginMounts, ...own];
 }
 
 /** Membership of a project in the core stack (`wt up`/`wt down`): which slug to bring up. */
@@ -141,6 +188,25 @@ export function validateConfig(config: WorkspaceConfig, repoName = "app"): Resol
   }
   for (const [name, pc] of Object.entries(resolved.projects)) {
     if (!pc.plugin) throw new Error(`wt.config: project ${name}: no plugin set (neither in the project nor in defaults)`);
+    for (const entry of pc.docker?.mounts ?? []) {
+      if (!isMountEntry(entry)) {
+        throw new Error(
+          `wt.config: project ${name}: docker.mounts entry ${JSON.stringify(entry)} must be "/abs/host:/container[:opts]", "./relative:/container[:opts]" or "volume:/container[:opts]"`,
+        );
+      }
+    }
+    const storage = pc.docker?.storage;
+    if (storage !== undefined && storage !== "volume" && storage !== "dir") {
+      throw new Error(`wt.config: project ${name}: docker.storage must be "volume" or "dir" (got ${JSON.stringify(storage)})`);
+    }
+    const keep = pc.docker?.keepLocalhost;
+    if (keep !== undefined && (!Array.isArray(keep) || keep.some((k) => typeof k !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)))) {
+      throw new Error(`wt.config: project ${name}: docker.keepLocalhost must be a list of env key names (got ${JSON.stringify(keep)})`);
+    }
+    const storageDir = pc.docker?.storageDir;
+    if (storageDir !== undefined && (typeof storageDir !== "string" || !storageDir.trim())) {
+      throw new Error(`wt.config: project ${name}: docker.storageDir must be a non-empty path (got ${JSON.stringify(storageDir)})`);
+    }
   }
   return resolved;
 }

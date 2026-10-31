@@ -98,11 +98,12 @@ export async function installDockerDeps(
   mounts: string[],
   installArgv: string[],
   spec: DepsSpec = NODE_DEPS,
+  depsSource: string = depsVolume(container, spec),
 ): Promise<void> {
   const before = await depsHash(dir, spec);
   // Fallback to the default layout: a plugin without docker() described no volumes, but
   // only dockerized projects get here — mount at least the repo and the deps volume.
-  const volumes = mounts.length ? mounts : [`${dir}:/opt/app`, `${depsVolume(container, spec)}:/opt/app/${spec.dir}`];
+  const volumes = mounts.length ? mounts : [`${dir}:/opt/app`, `${depsSource}:/opt/app/${spec.dir}`];
   await shInherit([
     "docker", "run", "--rm",
     ...volumes.flatMap((m) => ["-v", m]),
@@ -110,7 +111,7 @@ export async function installDockerDeps(
   ]);
   const stamp = formatDepsStamp(before, await depsHash(dir, spec));
   await shInherit([
-    "docker", "run", "--rm", "-v", `${depsVolume(container, spec)}:/nm`, image,
+    "docker", "run", "--rm", "-v", `${depsSource}:/nm`, image,
     "sh", "-c", `printf '%s' "$1" > /nm/${DEPS_STAMP}`, "sh", stamp,
   ]);
 }
@@ -119,6 +120,7 @@ export async function installDockerDeps(
  * Before starting a dockerized instance: empty volume — install; fingerprint does not match
  * the current package files — reinstall. Volumes and the command come from the plugin
  * (`docker().mounts` / `install().argv`). Parity with ensure_deps + a staleness check.
+ * `depsSource` — the `-v` source of the deps volume: its name, or its directory in dir storage.
  */
 export async function ensureDeps(
   dir: string,
@@ -127,8 +129,9 @@ export async function ensureDeps(
   mounts: string[],
   installArgv: string[],
   spec: DepsSpec = NODE_DEPS,
+  depsSource: string = depsVolume(container, spec),
 ): Promise<void> {
-  const volume = depsVolume(container, spec);
+  const volume = depsSource;
   const probe = Bun.spawn(
     ["docker", "run", "--rm", "-v", `${volume}:/nm`, image, "sh", "-c", PROBE_SCRIPT],
     { stdout: "pipe", stderr: "ignore" },
@@ -138,7 +141,7 @@ export async function ensureDeps(
   const verdict = depsVerdict(state, await depsHash(dir, spec));
   if (verdict === "ok") return;
   if (verdict === "stale") staleNotice(volume, spec);
-  await installDockerDeps(dir, container, image, mounts, installArgv, spec);
+  await installDockerDeps(dir, container, image, mounts, installArgv, spec, depsSource);
 }
 
 /** Host install in the worktree directory + fingerprint in its deps dir. */

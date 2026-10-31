@@ -1,8 +1,8 @@
 import { test, expect, beforeAll } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { classifySlim, collectSlimFacts, findOrphanVolumes, type SlimFacts } from "../src/slim";
+import { classifySlim, collectSlimFacts, findOrphanVolumes, slimOne, removeVolumeDirs, type SlimFacts } from "../src/slim";
 import { registerBundledPlugins } from "#plugins";
 
 // collectSlimFacts loads the projects' plugins → the registry has to be populated.
@@ -89,6 +89,48 @@ export default defineWorkspace({
     expect(plan.orphanVolumes).toEqual(["wtdev-gone-x-node_modules"]);
     // the unlisted repo's worktree is not slimmed: its plugin (and so its artifacts) is unknown
     expect(plan.items.map((i) => `${i.project}/${i.slug}`)).not.toContain("docs/old");
+  } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
+});
+
+test("collectSlimFacts in dir storage: the worktree's volume directory is a sized artifact, a directory without a worktree is an orphan, in every configured storageDir", async () => {
+  // realpath: git reports worktree paths resolved (/private/var on macOS) and listWorktrees matches them against orch
+  const orch = realpathSync(mkdtempSync(resolve(tmpdir(), "wt-slim-dir-")));
+  try {
+    writeFileSync(
+      resolve(orch, "wt.config.ts"),
+      `import { defineWorkspace } from ${JSON.stringify(CONFIG_SRC)};
+export default defineWorkspace({
+  defaults: { plugin: "@apartx/wt/plugin-node", docker: { image: "node:22", storage: "dir" } },
+  projects: { api: {}, web: { docker: { image: "node:22", storageDir: "./cache/vols" } } },
+});
+`,
+    );
+    await repo(resolve(orch, "projects", "api"));
+    await repo(resolve(orch, "projects", "web"));
+    await git(resolve(orch, "projects", "api"), "worktree", "add", "-q", resolve(orch, "worktrees", "api", "feat"), "-b", "feature/feat");
+    const owned = resolve(orch, "var", "volumes", "wtdev-api-feat-node_modules");
+    mkdirSync(owned, { recursive: true });
+    writeFileSync(resolve(owned, "blob"), "x".repeat(1024));
+    const gone = resolve(orch, "var", "volumes", "wtdev-api-gone-node_modules");
+    mkdirSync(gone, { recursive: true });
+    const goneWeb = resolve(orch, "cache", "vols", "wtdev-web-gone-node_modules");
+    mkdirSync(goneWeb, { recursive: true });
+    mkdirSync(resolve(orch, "var", "volumes", "wtdev-api-base-node_modules"), { recursive: true }); // base: owned, never an orphan
+
+    const plan = await collectSlimFacts(orch, { listVolumes: async () => [] });
+    const item = plan.items.find((i) => i.project === "api" && i.slug === "feat")!;
+    expect(item.action).toBe("slim");
+    expect(item.dirs.map((d) => d.path)).toContain(owned);
+    expect(item.dirs.find((d) => d.path === owned)!.bytes).toBeGreaterThan(0);
+    expect(plan.orphanVolumeDirs.sort()).toEqual([goneWeb, gone].sort());
+
+    await slimOne(orch, item);
+    expect(existsSync(owned)).toBe(false);
+    await removeVolumeDirs(plan.orphanVolumeDirs);
+    expect(existsSync(gone)).toBe(false);
+    expect(existsSync(goneWeb)).toBe(false);
   } finally {
     rmSync(orch, { recursive: true, force: true });
   }
