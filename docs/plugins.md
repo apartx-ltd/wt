@@ -12,6 +12,7 @@ A project picks its plugin in `wt.config.ts` (`plugin`, or `defaults.plugin`):
 |----|--------|
 | `"@apartx/wt/plugin-node"` | [Node](#node--apartxwtplugin-node) |
 | `"@apartx/wt/plugin-meteor"` | [Meteor](#meteor--apartxwtplugin-meteor) |
+| `"@apartx/wt/plugin-rust"` | [Rust](#rust--apartxwtplugin-rust) |
 
 The pre-release ids `"@wt/plugin-node"` and `"@wt/plugin-meteor"` are rejected with a
 `renamed to …` error. Only the bundled plugins can be loaded in this release; loading a
@@ -39,7 +40,8 @@ export const myPlugin: StackPlugin = {
 | `name: string` | Short name of the stack (`"node"`, `"meteor"`). |
 | `apiVersion?: number` | Contract version the plugin was written against. Loading fails unless it equals `PLUGIN_API_VERSION` (currently `1`), so a core with an incompatible contract refuses the plugin instead of misbehaving. |
 | `envInjection?: "dotenvx" \| "inline"` | How a host instance gets its env. `"inline"` (default): the core merges the env files into the process environment. `"dotenvx"`: the core wraps the dev command in `npx dotenvx run -f … -- sh -c "<command>"`. See [Env layering](#env-layering). |
-| `install(ctx): Command` | Dependency install — run by `wt new`, and again by `wt start`/`wt run` when `node_modules` is missing or stale (e.g. after `wt slim`). Runs in the worktree on the host, or in docker mode in a throwaway container from the project's image with the plugin's mounts. |
+| `install(ctx): Command` | Dependency install — run by `wt new`, and again by `wt start`/`wt run` when the deps dir is missing or stale (e.g. after `wt slim`). Runs in the worktree on the host, or in docker mode in a throwaway container from the project's image with the plugin's mounts. |
+| `deps?: DepsSpec` | `{ dir, files }` — where the stack keeps installed dependencies and which files fingerprint them. The core writes its install stamp `.wt-deps-hash` into `dir` (host: `<worktree>/<dir>`, docker: the volume `<container>-<dir>` with `/` flattened to `_`), treats a missing `dir` as "not installed" and reinstalls when the contents of `files` change. Default: `node_modules` with `package.json` and the npm/pnpm/yarn/bun lock files. |
 | `artifactDirs?: string[]` | Worktree directories that `install`/build restore (e.g. `node_modules`); `wt slim` deletes them in stopped worktrees. |
 | `devCommand(ctx): Command` | The dev server command. It must listen on `ctx.port`; in host mode the command runs as `sh -c "<argv joined>"`, so `$PORT` works there, while in docker mode it should use the literal `ctx.port` (`ctx.mode` tells which). |
 | `envLines?(ctx): string[]` | `KEY=value` lines written to `.env.worktree` right after `PORT` (Meteor: the HMR port). For a dockerized base checkout they are passed as `docker run -e`. |
@@ -110,6 +112,27 @@ For Meteor apps.
   `mongoDirectConnectionFilter`.
 - settings links: the linked settings file is passed as `--settings`.
 
+### Rust — `@apartx/wt/plugin-rust`
+
+For a cargo project whose binary reads its port from the `PORT` environment variable.
+
+- install: `cargo fetch`; dependencies are fingerprinted by `Cargo.toml` and `Cargo.lock`, the
+  stamp lives in `target/`; `wt slim` removes `target`.
+- dev: `cargo run`, or `cargo dev` when `.cargo/config.toml` (or `.cargo/config`) of the worktree
+  defines a `dev` alias under `[alias]` — the counterpart of node's `dev` script. Project-specific
+  flags go there, not into `wt.config.ts`: `dev = "run --features dev"`, `dev = "run --bin api"`,
+  `dev = "watch -x run"`. Inline env injection.
+- port: **not** passed as a flag — a Rust binary has no universal `--port`, and a clap-parsed one
+  exits on an unknown flag. The core sets `PORT` in the instance environment (host and docker), so
+  the binary reads `PORT` and lets it override the port in its own config. The base port comes
+  from `PORT=` in the project's `.env`.
+- docker: the worktree at `/opt/app`, `target` in a named volume per worktree (host artifacts
+  would not match the Linux container), the cargo registry and git caches in the shared volumes
+  `cargo_registry` and `cargo_git` (`/usr/local/cargo/…`, the layout of the official `rust`
+  images), `host.docker.internal` resolvable. Binding an external interface inside the container
+  (`0.0.0.0`) is up to the project.
+- no isolated database support, no extra ports.
+
 ## Env layering
 
 An instance sees, from highest to lowest precedence:
@@ -122,7 +145,7 @@ An instance sees, from highest to lowest precedence:
 `PORT` is also set in the process environment, so a base checkout whose `.env` has no `PORT`
 still gets the resolved port.
 
-- **Host, inline** (Node): the core merges the three files into the environment of
+- **Host, inline** (Node, Rust): the core merges the three files into the environment of
   `sh -c "<dev command>"`.
 - **Host, dotenvx** (Meteor): `npx dotenvx run -f <overlay> -f .env.worktree -f <base .env> --
   sh -c "<dev command>"`.

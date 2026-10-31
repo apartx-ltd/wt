@@ -21,7 +21,7 @@ daemon. One npm package, no build step: Bun runs the TypeScript sources directly
 | `server/` | the wt-server daemon (`Bun.serve`): REST + SSE API, static dashboard, spawns the CLI | — |
 | `tui/` | the opentui/Solid terminal dashboard; `src/server-boot.ts` finds or replaces the daemon | — |
 | `web/` | the SvelteKit dashboard (static SPA); only `web/build` ships in the package | — |
-| `plugins/` | `registry/` (plugin ids → implementations), `meteor/`, `node/` | `#plugins`, `#plugin-meteor`, `#plugin-node` |
+| `plugins/` | `registry/` (plugin ids → implementations), `meteor/`, `node/`, `rust/` | `#plugins`, `#plugin-meteor`, `#plugin-node`, `#plugin-rust` |
 | `docs/` | `config.md`, `plugins.md`, `agents.md` | — |
 
 Tests live next to their package in `*/test/`. `index.ts` is the public entry

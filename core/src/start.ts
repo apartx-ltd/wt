@@ -544,7 +544,7 @@ export async function runForeground(
   const plugin = await loadPlugin(config.plugin);
   const port = isBase ? (await resolveBasePort(projectDir(orch, project, projectsDir))) ?? 0 : (await readWorktreePort(dir)) ?? 0;
   const branch = await gitBranch(dir);
-  await ensureHostDeps(dir, plugin.install({ orch, project, slug, branch, projectDir: projectDir(orch, project, projectsDir), worktreeDir: dir, config }).argv);
+  await ensureHostDeps(dir, plugin.install({ orch, project, slug, branch, projectDir: projectDir(orch, project, projectsDir), worktreeDir: dir, config }).argv, plugin.deps);
   const { argv, env } = await buildHostDevArgs({ orch, project, slug, dir, branch, port, plugin, config, projectsDir });
   const proc = Bun.spawn(argv, { cwd: dir, env: env ? { ...process.env, ...env } : process.env, stdout: "inherit", stderr: "inherit", stdin: "inherit" });
   return await proc.exited;
@@ -562,7 +562,7 @@ async function startHost(
 ): Promise<StartResult> {
   const config = await resolveProjectConfig(orch, project);
   const plugin = await loadPlugin(config.plugin);
-  await ensureHostDeps(dir, plugin.install({ orch, project, slug, branch, projectDir: projectDir(orch, project, projectsDir), worktreeDir: dir, config }).argv);
+  await ensureHostDeps(dir, plugin.install({ orch, project, slug, branch, projectDir: projectDir(orch, project, projectsDir), worktreeDir: dir, config }).argv, plugin.deps);
   const { argv: args, env } = await buildHostDevArgs({ orch, project, slug, dir, branch, port, plugin, config, projectsDir });
 
   await acquireBuildLock(orch, probes);
@@ -605,7 +605,7 @@ async function startDockerized(
 
   // Dependency install comes after dockerSpec: both the volume layout and the command itself come
   // from the plugin (meteor → `meteor npm install` + meteor volumes, node → `npm install` without them).
-  await ensureDeps(dir, container, config.docker!.image, dockerSpec.mounts, plugin.install(specCtx).argv);
+  await ensureDeps(dir, container, config.docker!.image, dockerSpec.mounts, plugin.install(specCtx).argv, plugin.deps);
 
   const envFile = await renderEnvFile(orch, project, slug, host, dockerSpec.envLineFilter, projectsDir);
   const settingsMount = await renderDockerSettings(orch, project, slug, host, projectsDir);

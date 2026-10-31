@@ -2,7 +2,7 @@ import { test, expect, beforeAll } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { BASE_SLUG, computeWorktreeEnv, commitWorktreeEnv, regenerateWorktreeEnvPreserving, createWorktree, removeWorktree } from "../src/new-worktree";
+import { BASE_SLUG, computeWorktreeEnv, commitWorktreeEnv, regenerateWorktreeEnvPreserving, createWorktree, removeWorktree, instanceVolumes } from "../src/new-worktree";
 import { readLedger } from "../src/ports";
 import { registerBundledPlugins } from "#plugins";
 
@@ -430,4 +430,54 @@ export default defineWorkspace({
   } finally {
     rmSync(orch, { recursive: true, force: true });
   }
+});
+
+// --- plugin-declared dependency layout (a cargo project: target/ + Cargo files, no node_modules) ---
+
+const CARGO_CONFIG = `
+import { defineWorkspace } from ${JSON.stringify(CONFIG_SRC)};
+import { registerPlugin, PLUGIN_API_VERSION } from ${JSON.stringify(resolve(import.meta.dir, "../src/plugin"))};
+registerPlugin("@apartx/wt/plugin-fake-cargo", {
+  name: "fake-cargo",
+  apiVersion: PLUGIN_API_VERSION,
+  install: () => ({ argv: ["true"] }),
+  deps: { dir: "target", files: ["Cargo.toml", "Cargo.lock"] },
+  devCommand: () => ({ argv: ["true"] }),
+});
+export default defineWorkspace({
+  defaults: { plugin: "@apartx/wt/plugin-fake-cargo" },
+  projects: { "api": {} },
+});
+`;
+
+test("createWorktree: the install fingerprint goes into the plugin's deps dir, node_modules is not created", async () => {
+  const orch = mkdtempSync(resolve(tmpdir(), "wt-cargo-"));
+  const pdir = resolve(orch, "projects", "api");
+  mkdirSync(pdir, { recursive: true });
+  writeFileSync(resolve(pdir, ".env"), "PORT=8080\n");
+  writeFileSync(resolve(pdir, "Cargo.toml"), `[package]\nname = "api"\n`);
+  writeFileSync(resolve(orch, "wt.config.ts"), CARGO_CONFIG);
+  await git(pdir, "init", "-q", "-b", "main");
+  await git(pdir, "config", "user.email", "t@t.t");
+  await git(pdir, "config", "user.name", "t");
+  await git(pdir, "add", "-A");
+  await git(pdir, "commit", "-q", "-m", "init");
+  try {
+    const r = await createWorktree(orch, "api", "feat");
+    expect(r.port).toBe(8090);
+    expect(existsSync(resolve(r.dir, "target", ".wt-deps-hash"))).toBe(true);
+    expect(existsSync(resolve(r.dir, "node_modules"))).toBe(false);
+  } finally {
+    rmSync(orch, { recursive: true, force: true });
+  }
+});
+
+test("instanceVolumes: the plugin's owned volumes; the legacy meteor pair when the plugin has no docker()", async () => {
+  registerBundledPlugins();
+  const ctx = { worktreeDir: "/o/worktrees/api/feat", container: "wtdev-api-feat" } as any;
+  const { loadPlugin } = await import("../src/plugin");
+  expect(instanceVolumes(await loadPlugin("@apartx/wt/plugin-rust"), ctx)).toEqual(["wtdev-api-feat-target"]);
+  expect(instanceVolumes(await loadPlugin("@apartx/wt/plugin-node"), ctx)).toEqual(["wtdev-api-feat-node_modules"]);
+  expect(instanceVolumes({ name: "bare", install: () => ({ argv: [] }), devCommand: () => ({ argv: [] }) }, ctx))
+    .toEqual(["wtdev-api-feat-node_modules", "wtdev-api-feat-meteor_local"]);
 });

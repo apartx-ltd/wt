@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import type { DepsSpec } from "./plugin";
 
 /**
  * Dependency fingerprint at the root of node_modules (in the container volume or in the host project dir).
@@ -15,10 +16,22 @@ export const DEPS_STAMP = ".wt-deps-hash";
 /** Files the package manager uses to decide what to install. Missing ones are skipped. */
 const DEPS_FILES = ["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"];
 
-/** sha256 over the contents of the directory's package files (the name is part of the hash — moving content between files won't match). */
-export async function depsHash(dir: string): Promise<string> {
+/** The node layout — what every plugin without its own `deps` gets. */
+export const NODE_DEPS: DepsSpec = { dir: "node_modules", files: DEPS_FILES };
+
+/**
+ * Name of the container volume holding the deps dir: `<container>-<dir>` with the path
+ * flattened (`.meteor/local` → `meteor_local`), which is the naming the plugins' `docker()`
+ * mounts already use — so the core's probe and the plugin's mount meet on the same volume.
+ */
+export function depsVolume(container: string, spec: DepsSpec = NODE_DEPS): string {
+  return `${container}-${spec.dir.replace(/^\./, "").replace(/\//g, "_")}`;
+}
+
+/** sha256 over the contents of the spec's files (the name is part of the hash — moving content between files won't match). */
+export async function depsHash(dir: string, spec: DepsSpec = NODE_DEPS): Promise<string> {
   const h = createHash("sha256");
-  for (const name of DEPS_FILES) {
+  for (const name of spec.files) {
     const path = resolve(dir, name);
     if (!existsSync(path)) continue;
     h.update(`${name}\0`);
@@ -54,7 +67,7 @@ export function depsVerdict(state: DepsState, current: string): DepsVerdict {
   return known.includes(current) ? "ok" : "stale";
 }
 
-/** Volume probe script: the first line is any entry (empty = the volume is empty), the rest is the fingerprint. */
+/** Volume probe script (the deps volume is mounted at /nm): the first line is any entry (empty = the volume is empty), the rest is the fingerprint. */
 const PROBE_SCRIPT = `ls -A /nm 2>/dev/null | head -1; cat /nm/${DEPS_STAMP} 2>/dev/null`;
 
 /** Parse the output of PROBE_SCRIPT. */
@@ -64,8 +77,8 @@ export function parseVolumeProbe(out: string): DepsState {
   return { empty: first.trim() === "", stamp: stamp || null };
 }
 
-function staleNotice(where: string): void {
-  process.stderr.write(`wt: dependencies in ${where} do not match package.json/lock — reinstalling\n`);
+function staleNotice(where: string, spec: DepsSpec): void {
+  process.stderr.write(`wt: dependencies in ${where} do not match ${spec.files.join("/")} — reinstalling\n`);
 }
 
 async function shInherit(cmd: string[], cwd?: string): Promise<void> {
@@ -75,7 +88,7 @@ async function shInherit(cmd: string[], cwd?: string): Promise<void> {
 }
 
 /**
- * Install dependencies into the container's node_modules volume (`docker run --rm` with the plugin's volumes)
+ * Install dependencies into the container's deps volume (`docker run --rm` with the plugin's volumes)
  * and write the fingerprint into the same volume. Shared by `wt new` and `wt start`.
  */
 export async function installDockerDeps(
@@ -84,19 +97,20 @@ export async function installDockerDeps(
   image: string,
   mounts: string[],
   installArgv: string[],
+  spec: DepsSpec = NODE_DEPS,
 ): Promise<void> {
-  const before = await depsHash(dir);
-  // Fallback to the default meteor layout: a plugin without docker() described no volumes, but
-  // only dockerized projects get here — mount at least the repo.
-  const volumes = mounts.length ? mounts : [`${dir}:/opt/app`, `${container}-node_modules:/opt/app/node_modules`];
+  const before = await depsHash(dir, spec);
+  // Fallback to the default layout: a plugin without docker() described no volumes, but
+  // only dockerized projects get here — mount at least the repo and the deps volume.
+  const volumes = mounts.length ? mounts : [`${dir}:/opt/app`, `${depsVolume(container, spec)}:/opt/app/${spec.dir}`];
   await shInherit([
     "docker", "run", "--rm",
     ...volumes.flatMap((m) => ["-v", m]),
     "-w", "/opt/app", image, ...installArgv,
   ]);
-  const stamp = formatDepsStamp(before, await depsHash(dir));
+  const stamp = formatDepsStamp(before, await depsHash(dir, spec));
   await shInherit([
-    "docker", "run", "--rm", "-v", `${container}-node_modules:/nm`, image,
+    "docker", "run", "--rm", "-v", `${depsVolume(container, spec)}:/nm`, image,
     "sh", "-c", `printf '%s' "$1" > /nm/${DEPS_STAMP}`, "sh", stamp,
   ]);
 }
@@ -112,37 +126,39 @@ export async function ensureDeps(
   image: string,
   mounts: string[],
   installArgv: string[],
+  spec: DepsSpec = NODE_DEPS,
 ): Promise<void> {
+  const volume = depsVolume(container, spec);
   const probe = Bun.spawn(
-    ["docker", "run", "--rm", "-v", `${container}-node_modules:/nm`, image, "sh", "-c", PROBE_SCRIPT],
+    ["docker", "run", "--rm", "-v", `${volume}:/nm`, image, "sh", "-c", PROBE_SCRIPT],
     { stdout: "pipe", stderr: "ignore" },
   );
   const state = parseVolumeProbe(await new Response(probe.stdout).text());
   await probe.exited;
-  const verdict = depsVerdict(state, await depsHash(dir));
+  const verdict = depsVerdict(state, await depsHash(dir, spec));
   if (verdict === "ok") return;
-  if (verdict === "stale") staleNotice(`${container}-node_modules`);
-  await installDockerDeps(dir, container, image, mounts, installArgv);
+  if (verdict === "stale") staleNotice(volume, spec);
+  await installDockerDeps(dir, container, image, mounts, installArgv, spec);
 }
 
-/** Host install in the worktree directory + fingerprint in its node_modules. */
-export async function installHostDeps(dir: string, installArgv: string[]): Promise<void> {
-  const before = await depsHash(dir);
+/** Host install in the worktree directory + fingerprint in its deps dir. */
+export async function installHostDeps(dir: string, installArgv: string[], spec: DepsSpec = NODE_DEPS): Promise<void> {
+  const before = await depsHash(dir, spec);
   await shInherit(installArgv, dir);
-  await mkdir(resolve(dir, "node_modules"), { recursive: true });
-  await writeFile(resolve(dir, "node_modules", DEPS_STAMP), formatDepsStamp(before, await depsHash(dir)));
+  await mkdir(resolve(dir, spec.dir), { recursive: true });
+  await writeFile(resolve(dir, spec.dir, DEPS_STAMP), formatDepsStamp(before, await depsHash(dir, spec)));
 }
 
-/** Host counterpart of ensureDeps: node_modules is missing (removed by `wt slim`) or stale — run the plugin's install. */
-export async function ensureHostDeps(dir: string, installArgv: string[]): Promise<void> {
-  const nm = resolve(dir, "node_modules");
-  const stampPath = resolve(nm, DEPS_STAMP);
+/** Host counterpart of ensureDeps: the deps dir is missing (removed by `wt slim`) or stale — run the plugin's install. */
+export async function ensureHostDeps(dir: string, installArgv: string[], spec: DepsSpec = NODE_DEPS): Promise<void> {
+  const depsDir = resolve(dir, spec.dir);
+  const stampPath = resolve(depsDir, DEPS_STAMP);
   const state: DepsState = {
-    empty: !existsSync(nm),
+    empty: !existsSync(depsDir),
     stamp: existsSync(stampPath) ? await readFile(stampPath, "utf8") : null,
   };
-  const verdict = depsVerdict(state, await depsHash(dir));
+  const verdict = depsVerdict(state, await depsHash(dir, spec));
   if (verdict === "ok") return;
-  if (verdict === "stale") staleNotice(nm);
-  await installHostDeps(dir, installArgv);
+  if (verdict === "stale") staleNotice(depsDir, spec);
+  await installHostDeps(dir, installArgv, spec);
 }

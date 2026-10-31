@@ -86,7 +86,7 @@ defaults.plugin is unset` — list the project or set `defaults.plugin`.
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `plugin` | `string` | The stack plugin: `"@apartx/wt/plugin-node"` or `"@apartx/wt/plugin-meteor"` (see [plugins.md](plugins.md)). Falls back to `defaults.plugin`; a project with no plugin at all fails validation. |
+| `plugin` | `string` | The stack plugin: `"@apartx/wt/plugin-node"`, `"@apartx/wt/plugin-meteor"` or `"@apartx/wt/plugin-rust"` (see [plugins.md](plugins.md)). Falls back to `defaults.plugin`; a project with no plugin at all fails validation. |
 | `docker` | `{ image: string }` | Present ⇒ the project runs in Docker (container `wtdev-<p>-<slug>`, base checkout included); `image` is the dev image and must contain the stack's toolchain. `wt new` runs the install inside the image too. Absent ⇒ host process. |
 | `core` | `{ slug: string }` | Present ⇒ the project belongs to the core stack: `wt up` starts `<p>/<slug>` (use `"base"` for the base checkout). |
 | `env` | `Record<string, string>` | Extra keys written to the worktree's `.env.worktree`, with templates (below). The base checkout does not get them. |
