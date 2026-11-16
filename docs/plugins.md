@@ -11,6 +11,7 @@ A project picks its plugin in `wt.config.ts` (`plugin`, or `defaults.plugin`):
 | Id | Plugin |
 |----|--------|
 | `"@apartx/wt/plugin-node"` | [Node](#node--apartxwtplugin-node) |
+| `"@apartx/wt/plugin-pnpm"` | [pnpm](#pnpm--apartxwtplugin-pnpm) |
 | `"@apartx/wt/plugin-meteor"` | [Meteor](#meteor--apartxwtplugin-meteor) |
 | `"@apartx/wt/plugin-rust"` | [Rust](#rust--apartxwtplugin-rust) |
 
@@ -94,6 +95,17 @@ For any Node project with a `dev` script that accepts `--port`.
   `mongoDirectConnectionFilter`. Binding to an external interface inside the container (e.g.
   vite's `server.host`) is up to the project.
 - no isolated database support.
+
+### pnpm — `@apartx/wt/plugin-pnpm`
+
+For a pnpm workspace (monorepo) or a single package managed by pnpm.
+
+- install: `pnpm install --frozen-lockfile`; the install marker and the `wt slim` artifact is
+  the root `node_modules`; reinstall when `package.json` or `pnpm-lock.yaml` changes.
+- dev: `pnpm dev`, inline env injection. No `--port`: the project reads `PORT` from the
+  environment and derives any secondary ports itself (for example from `${offset}` passed
+  through `env` in `wt.config.ts`).
+- host mode only: no docker layout, no extra ports, no isolated database support.
 
 ### Meteor — `@apartx/wt/plugin-meteor`
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New bundled plugin `@apartx/wt/plugin-pnpm` for pnpm workspaces: `pnpm install --frozen-lockfile` /
+  `pnpm dev`, the port reaches the project through `PORT` only; host mode.
 - `docker.mounts` in `wt.config.ts`: extra `-v` entries for a dockerized project, appended after
   the plugin's mounts, in compose syntax (`/abs/host:/container[:ro]`, `./relative-to-workspace:/container`,
   `volume:/container`) — for what the worktree does not carry, such as a git-ignored config.

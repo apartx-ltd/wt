@@ -158,8 +158,8 @@ that started it.
   block to paste into the workspace's `AGENTS.md` / `CLAUDE.md` so later sessions use `wt`
   instead of hand-made worktrees and ports. [AGENTS.md](AGENTS.md) is for working on `wt` itself.
 
-Plugin ids are package specifiers: `"@apartx/wt/plugin-node"`, `"@apartx/wt/plugin-meteor"` and
-`"@apartx/wt/plugin-rust"`.
+Plugin ids are package specifiers: `"@apartx/wt/plugin-node"`, `"@apartx/wt/plugin-pnpm"`,
+`"@apartx/wt/plugin-meteor"` and `"@apartx/wt/plugin-rust"`.
 **Migrating from the pre-release ids:** `"@wt/plugin-node"` and `"@wt/plugin-meteor"` are no
 longer accepted — `wt` stops with a `renamed to …` error before it creates anything (no
 worktree or branch is left behind); replace them in `wt.config.ts`.

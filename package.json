@@ -14,6 +14,7 @@
     "./plugin": "./core/src/plugin.ts",
     "./plugin-meteor": "./plugins/meteor/src/index.ts",
     "./plugin-node": "./plugins/node/src/index.ts",
+    "./plugin-pnpm": "./plugins/pnpm/src/index.ts",
     "./plugin-rust": "./plugins/rust/src/index.ts",
     "./config-schema": "./core/schema/wt.config.schema.json"
   },
@@ -24,6 +25,7 @@
     "#plugins": "./plugins/registry/src/index.ts",
     "#plugin-meteor": "./plugins/meteor/src/index.ts",
     "#plugin-node": "./plugins/node/src/index.ts",
+    "#plugin-pnpm": "./plugins/pnpm/src/index.ts",
     "#plugin-rust": "./plugins/rust/src/index.ts"
   },
   "files": [
@@ -38,6 +40,7 @@
     "tui/src",
     "plugins/meteor/src",
     "plugins/node/src",
+    "plugins/pnpm/src",
     "plugins/rust/src",
     "plugins/registry/src",
     "web/build",
